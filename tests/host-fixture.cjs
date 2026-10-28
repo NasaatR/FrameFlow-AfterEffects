@@ -32,9 +32,10 @@ function fixture(options={}){
   vm.createContext(ctx);if(!options.unloaded)vm.runInContext(source,ctx);
   let count=0;
   function raw(text){return JSON.parse(ctx.$.global.FrameFlowCEP.dispatch(encodeURIComponent(text)));}
-  function call(data,id){return raw(JSON.stringify({id:id||'test:'+(++count),version:'2.3.0',data}));}
+  function call(data,id){return raw(JSON.stringify({id:id||'test:'+(++count),version:'2.4.0',data}));}
   function state(){const r=call({op:'read'});assert.equal(r.ok,true,r.error&&r.error.message);return r.data.state;}
   function action(op,extra={}){return call({op,token:state().token,ids:[101],...extra});}
   return {ctx,comp,app,call,raw,state,action,injectOffsetFailure(){failOffset=true;},addLayer(inPoint,outPoint){const l=make(inPoint,outPoint);comp.items.push(l);return l;},writes:()=>writes,undo:()=>undo,groups:()=>groups,loads:()=>loads};
 }
 module.exports={fixture};
+

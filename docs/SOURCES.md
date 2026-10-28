@@ -27,3 +27,8 @@ Clipboard paths are checked with DOM/API simulations; no source was sent to an e
 ## 2.3.0 intervals and compact UI
 
 Rechecked 2026-10-18: https://ae-scripting.docsforadobe.dev/layer/layer/ (Start/In/Out in composition seconds and native layer movement) and https://ae-scripting.docsforadobe.dev/property/property/ (key times, values and native key metadata). These references do not prove actual AE execution. Interval policies are project design decisions: no automatic Split/deletion or duration change. Browser checks use a simulated host.
+
+
+## 2.4.0 whole-layer arrangement
+
+Rechecked 2026-10-29: https://ae-scripting.docsforadobe.dev/layer/layer/ — persistent project-scoped layer IDs, layer index and composition-time Start/In/Out, plus stretch bounds. The implementation reuses the project's existing native startTime translation and verification; no third-party sequencing code or dependency is copied. Explicit order, zero-gap policy and preview requirements are project decisions. Native animation/Undo and actual AE performance still require host execution. The supplied Development Playbook 2.3.1 was read for the strict final ES3 gate and publication rules.

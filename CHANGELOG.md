@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.4.0
+
+- Add Align In/Out to Cursor, Stagger and Sequence with mandatory captured-plan preview, explicit stack/time order and cursor/first-layer anchors. Sequence accepts a zero-frame gap. Preserve subframes, durations, native animation, selection and composition markers.
+- Reuse native whole-layer translation and bounded recovery; validate all targets before writing, including scope, ordering, source/stretch/timing and keyed-property changes. Keep one-shot application and no-replay transport.
+- Show per-target signed shifts, chosen order and composition-boundary counts. Cap browser details without truncating the native plan. Skip property scans and Undo groups for unchanged layouts.
+- Keep the compact bilingual panel; add Arrange to the existing action strip, with wrapping at narrow widths and large type. Expand regression/browser coverage and refresh the roadmap and stale status document.
+- Real AE execution, Undo/Redo, installers and performance on artist projects remain separately unverified.
+
 ## 2.3.0
 
 - Compact the panel to 360 × 290: Auto scope dropdown, smaller mode dropdown and arrow/count buttons. Remove duplicate direction/step labels, scope hint, CTI readout and preview-first toggle; preview any command through Plan.
@@ -61,3 +69,4 @@ Actual AE 25.6.4 execution remains to be confirmed.
 - Preserve extension ID, installation location, settings, timeline behavior and timing/editing algorithms from 2.0.0.
 
 Host execution in real After Effects remains unverified; local checks use simulated AE/CEP/DOM.
+

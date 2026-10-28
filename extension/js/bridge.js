@@ -1,6 +1,6 @@
 (function(root) {
   'use strict';
-  const VERSION='2.3.0';
+  const VERSION='2.4.0';
   function uri(value) {return encodeURIComponent(value).replace(/[!'()*]/g,c=>'%'+c.charCodeAt(0).toString(16).toUpperCase());}
   function encode(request) {return '$.global.FrameFlowCEP.dispatch("'+uri(JSON.stringify(request))+'")';}
   function problem(message,code,stage,op) {const e=Error(message);e.code=code;e.stage=stage;e.operation=op;return e;}
@@ -136,3 +136,4 @@
   const api={create,createCEP,encode,extensionPath,bootstrapScript,VERSION};
   if(typeof module==='object'&&module.exports) module.exports=api;else root.FFBridge=api;
 }(typeof window==='object'?window:this));
+

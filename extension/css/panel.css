@@ -11,3 +11,7 @@ button,input,textarea{font:inherit;color:inherit}button{border:1px solid transpa
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;scroll-behavior:auto!important}}
 
 .utility-menus{display:flex;align-items:center;gap:3px}.utility-menus svg{width:11px;height:11px}.composition{gap:5px;margin-bottom:7px}.composition strong{font-size:var(--small)}.shift-button{flex-direction:row}.popup-menu button.with-note{min-height:48px}#mode{max-width:48%;overflow:hidden;text-overflow:ellipsis}.menu-copy{min-width:0}.menu-copy span,.menu-copy small{overflow-wrap:anywhere}
+
+
+/* Wrap the action strip for large text and localized labels. */
+.utility-row{flex-wrap:wrap;gap:4px}.utility-menus{flex-wrap:wrap;justify-content:flex-end;margin-left:auto;min-width:0;gap:0}.utility-menus button{padding:4px 5px;gap:3px}.arrange-number{width:100px;max-width:45%;text-align:right;font-variant-numeric:tabular-nums}

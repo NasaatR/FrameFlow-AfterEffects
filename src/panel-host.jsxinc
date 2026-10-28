@@ -1,6 +1,6 @@
 /* FrameFlow CEP host. Data-only RPC; no eval, command IDs, network or file writes. */
 var FFCEP = (function () {
-    var VERSION = "2.3.0", serial = 0, session = String(new Date().getTime()) + "-" + String(Math.random());
+    var VERSION = "2.4.0", serial = 0, session = String(new Date().getTime()) + "-" + String(Math.random());
     var saved = null, recent = [], busy = false, prepared = null, planSerial = 0;
     function fail(message) { throw new Error(message); }
     function own(o, k) { return Object.prototype.hasOwnProperty.call(o, k); }
@@ -232,6 +232,11 @@ var FFCEP = (function () {
     }
     function corePlan(c, r) {
         var request, plan;
+        if (r.op === "arrange") {
+            schema(r,"|op||token||action||scope||order||anchor||frames||preview|");
+            if (r.preview !== true) fail("Arrange requires a preview before applying.");
+            return FFHost.prepareArrange(r);
+        }
         if (r.op === "interval") {
             schema(r,"|op||token||action||frames||scope||crossing||compMarkers||preview|");
             if (r.preview !== true) fail("Interval operations require a preview before applying.");
@@ -261,23 +266,26 @@ var FFCEP = (function () {
         plan = FFHost.prepare(request); return plan;
     }
     function planSummary(plan, id) {
-        var r = plan.request, c = plan.context, targets = [], seen = {}, layers = 0, keys = 0, properties = 0, i, change, item;
+        var r = plan.request, c = plan.context, targets = [], seen = {}, positions = {}, layers = 0, keys = 0, properties = 0, outside = 0, i, change, item;
+        if (plan.arrangement) for (i = 0; i < plan.arrangement.slots.length; i++) positions["k"+plan.arrangement.slots[i].id] = i+1;
         for (i = 0; i < plan.changes.length; i++) {
             change = plan.changes[i]; keys += change.moved || 0;
+            if (plan.arrangement && (change.after.inPoint < 0 || change.after.outPoint > c.duration)) outside++;
             if (change.kind === "property") properties++;
             if (change.layer && !seen["k"+change.layer.id]) { seen["k"+change.layer.id] = true; layers++; }
             if (targets.length >= 100) continue;
             item = {layerId:change.layer ? change.layer.id : null,index:change.layer ? change.layer.index : null,
-                kind:change.kind,label:String(change.label).slice(0,500),keys:change.moved || 0};
+                kind:change.kind,label:String(change.label).slice(0,500),keys:change.moved || 0,delta:typeof change.delta === "number" ? change.delta : FFCore.offsetSeconds(c,r)};
             if (change.kind !== "property") { item.before = change.before; item.after = change.after; }
+            if (plan.arrangement) item.position = positions["k"+item.layerId];
             targets.push(item);
         }
-        return {id:id,operation:r.interval ? r.operation : r.operation === "closeGap" ? "gap" : "offset",scope:r.scope,mode:r.mode || "offset",
-            region:r.region,direction:r.direction,frames:Math.abs(FFCore.offsetSeconds(c,r)/c.frameDuration),
-            delta:FFCore.offsetSeconds(c,r),cti:r.operation === "closeGap" || r.interval ? r.originalCTI : c.cti,
+        return {id:id,operation:plan.arrangement ? "arrange" : r.interval ? r.operation : r.operation === "closeGap" ? "gap" : "offset",scope:r.scope,mode:r.mode || "offset",arrangement:plan.arrangement ? {action:plan.arrangement.action,order:plan.arrangement.order,anchor:plan.arrangement.anchor,frames:plan.arrangement.frames,total:plan.arrangement.slots.length} : null,
+            region:r.region,direction:r.direction,frames:plan.arrangement ? plan.arrangement.frames : Math.abs(FFCore.offsetSeconds(c,r)/c.frameDuration),
+            delta:plan.arrangement ? 0 : FFCore.offsetSeconds(c,r),cti:r.operation === "closeGap" || r.interval ? r.originalCTI : c.cti,
             frameDuration:c.frameDuration,displayStart:plan.comp.displayStartTime,blocked:plan.errors.length > 0,
             counts:{layers:layers,keys:keys,properties:properties,changes:plan.changes.length,skipped:plan.skips.length,
-                mediaSkipped:plan.mediaLimits ? plan.mediaLimits.length : 0,errors:plan.errors.length,keptCrossing:plan.keptCrossing ? plan.keptCrossing.length : 0},targets:targets,
+                outsideComposition:outside,mediaSkipped:plan.mediaLimits ? plan.mediaLimits.length : 0,errors:plan.errors.length,keptCrossing:plan.keptCrossing ? plan.keptCrossing.length : 0},targets:targets,
             targetsOmitted:Math.max(0,plan.changes.length-targets.length),skips:plan.skips.slice(0,40),errors:plan.errors.slice(0,20),
             skipsOmitted:Math.max(0,plan.skips.length-40),gap:r.operation === "closeGap" ? {start:r.gap.start,end:r.gap.end} : null,
             interval:r.interval || null,keptTargets:plan.keptCrossing ? plan.keptCrossing.slice(0,100) : []};
@@ -303,7 +311,7 @@ var FFCEP = (function () {
             schema(r, "|op||token||previewId|"); pending = prepared; prepared = null;
             if (!pending || typeof r.previewId !== "string" || pending.id !== r.previewId || pending.token !== r.token) fail("План устарел. Повторите проверку перед применением.");
             plan = pending.plan; result = FFHost.applyPlan(plan); report = FFHost.report(plan,result,"Применить проверенный план");
-        } else if (r.op === "move" || r.op === "offset" || r.op === "gap" || r.op === "interval") {
+        } else if (r.op === "move" || r.op === "offset" || r.op === "gap" || r.op === "interval" || r.op === "arrange") {
             if (typeof r.preview !== "undefined") bool(r.preview);
             plan = corePlan(c, r); report = FFHost.report(plan, null, "ПРОВЕРКА");
             if (r.preview) {
@@ -360,3 +368,4 @@ var FFCEP = (function () {
     }
     return {dispatch:dispatch, version:VERSION};
 }());
+

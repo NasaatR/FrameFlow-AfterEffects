@@ -37,8 +37,9 @@ jobs:
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: FrameFlow-AE-2.3.0-checked-build
+          name: FrameFlow-AE-2.4.0-checked-build
           path: artifacts/*
           if-no-files-found: error
           retention-days: 14
+
 

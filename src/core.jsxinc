@@ -30,6 +30,33 @@ var FFCore = (function () {
         }
         return frames(r.frames) * c.frameDuration * r.direction;
     }
+    /* Pure whole-layer layout. Order is explicit and never depends on selection click order. */
+    function arrangement(models, c, r) {
+        var ordered = models.slice(0), slots = [], seen = {}, i, m, at, delta, step;
+        if (r.action !== "alignIn" && r.action !== "alignOut" && r.action !== "stagger" && r.action !== "sequence") throw new Error("Choose a supported arrangement.");
+        if (r.order !== "top" && r.order !== "bottom" && r.order !== "time") throw new Error("Choose a layer order.");
+        if (r.anchor !== "cursor" && r.anchor !== "first") throw new Error("Choose a layout anchor.");
+        if ((r.action === "alignIn" || r.action === "alignOut") && r.anchor !== "cursor") throw new Error("Align uses the AE cursor.");
+        if (typeof r.frames !== "number" || !isFinite(r.frames) || Math.floor(r.frames) !== r.frames || r.frames < (r.action === "sequence" ? 0 : 1) || r.frames > 1000000) throw new Error("Invalid arrangement frame count.");
+        if (!isFinite(c.cti) || !isFinite(c.frameDuration) || c.frameDuration <= 0) throw new Error("Invalid composition timing.");
+        if (!ordered.length || ordered.length > 2000) throw new Error("Choose a scope with 1 to 2000 layers.");
+        if ((r.action === "stagger" || r.action === "sequence") && ordered.length < 2) throw new Error("Choose at least two layers for Stagger or Sequence.");
+        for (i = 0; i < ordered.length; i++) {
+            m = ordered[i];
+            if (typeof m.id !== "number" || !isFinite(m.id) || seen["k"+m.id] || !isFinite(m.index) || !isFinite(m.start) || !isFinite(m.inPoint) || !isFinite(m.outPoint) || m.inPoint >= m.outPoint) throw new Error("Invalid arrangement layer data.");
+            seen["k"+m.id] = true;
+        }
+        ordered.sort(function (a,b) { return r.order === "time" ? a.inPoint-b.inPoint || a.index-b.index : r.order === "bottom" ? b.index-a.index : a.index-b.index; });
+        at = r.anchor === "cursor" ? c.cti : ordered[0].inPoint; step = r.frames*c.frameDuration;
+        for (i = 0; i < ordered.length; i++) {
+            m = ordered[i]; delta = r.action === "alignOut" ? c.cti-m.outPoint : r.action === "alignIn" ? c.cti-m.inPoint : at-m.inPoint;
+            if (!isFinite(delta) || Math.abs(delta) > 10800 || Math.abs(m.start+delta) > 10800 || Math.abs(m.inPoint+delta) > 10800 || Math.abs(m.outPoint+delta) > 10800) throw new Error("Arrangement exceeds AE time limits.");
+            slots.push({id:m.id,delta:delta});
+            if (r.action === "sequence") at += m.outPoint-m.inPoint+step;
+            else if (r.action === "stagger") at += step;
+        }
+        return slots;
+    }
     function gapPlan(layers, c) {
         var a = 0, b = null, i, l, d, eps = c.frameDuration * 0.000001;
         function no(why) { return {ok:false,reason:why}; }
@@ -202,12 +229,12 @@ var FFCore = (function () {
     function encodeSettings(s) {
         return "v1|density=" + s.density + "|spacing=" + s.spacing + "|logging=" + (s.logging ? "1" : "0") + "|favorites=" + s.favorites.join(",");
     }
-    return {validMode:validMode,wholeLayerPlan:wholeLayerPlan,intervalLayerPlan:intervalLayerPlan,parseAdvancedState:parseAdvancedState,encodeAdvancedState:encodeAdvancedState,
+    return {arrangement:arrangement,validMode:validMode,wholeLayerPlan:wholeLayerPlan,intervalLayerPlan:intervalLayerPlan,parseAdvancedState:parseAdvancedState,encodeAdvancedState:encodeAdvancedState,
         offsetSeconds:offsetSeconds,gapPlan:gapPlan,parsePanelState:parsePanelState,encodePanelState:encodePanelState,parseFrames:frames, parseDecimal:decimal, inRegion:inRegion, offsetLayerPlan:offsetLayerPlan, keyPlan:keyPlan,
         parseFavorites:favorites, defaults:defaults, parseSettings:parseSettings, encodeSettings:encodeSettings};
 }());
 
-/* FrameFlow AE 2.3.0. AE adapter; native values never pass through JSON. */
+/* FrameFlow AE 2.4.0. AE adapter; native values never pass through JSON. */
 var FFHost = (function () {
     var LIMITS = {properties:20000, keys:50000, reportLines:300, textCharacters:2000};
     var ROOTS = ["ADBE Transform Group", "ADBE Mask Parade", "ADBE Effect Parade", "ADBE MTrackers",
@@ -659,6 +686,34 @@ var FFHost = (function () {
             if (plan.intervalMarker) verifyProperty(plan.intervalMarker,plan.intervalMarkerSnapshot,originalTimes(plan.intervalMarkerSnapshot),context.frameDuration*0.000001);
         }
     }
+    function prepareArrange(options) {
+        var context = readContext(), layers = selectedLayers(context.comp,options.scope), models = [], state = [], deltas = {}, i, slots, plan, byId = {}, orderedChanges = [];
+        for (i = 0; i < layers.length; i++) {
+            models.push({id:layers[i].id,index:layers[i].index,start:layers[i].startTime,inPoint:layers[i].inPoint,outPoint:layers[i].outPoint});
+            state.push(intervalModel(layers[i]));
+        }
+        slots = FFCore.arrangement(models,context,options);
+        for (i = 0; i < slots.length; i++) deltas["k"+slots[i].id] = slots[i].delta;
+        plan = prepare({operation:"arrange",scope:options.scope,mode:"layers",region:"all",frames:1,direction:1,strict:true,layerDeltas:deltas});
+        plan.arrangeState = state; plan.arrangeIndexes = [];
+        for (i = 0; i < layers.length; i++) plan.arrangeIndexes.push(layers[i].index);
+        plan.arrangement = {action:options.action,order:options.order,anchor:options.anchor,frames:options.frames,slots:slots};
+        for (i = 0; i < plan.changes.length; i++) byId["k"+plan.changes[i].layer.id] = plan.changes[i];
+        for (i = 0; i < slots.length; i++) if (byId["k"+slots[i].id]) orderedChanges.push(byId["k"+slots[i].id]);
+        plan.changes = orderedChanges;
+        return plan;
+    }
+    function validateArrangePlan(plan) {
+        var context = readContext(), layers = selectedLayers(context.comp,plan.request.scope), i, j, a, b;
+        var names = ["start","inPoint","outPoint","locked","stretch","remap","source","sourceDuration","still","movingSource"];
+        if (context.comp !== plan.comp || context.cti !== plan.context.cti || context.frameDuration !== plan.context.frameDuration || context.duration !== plan.context.duration || layers.length !== plan.arrangeState.length) throw new Error("Arrangement targets changed. Preview again.");
+        for (i = 0; i < layers.length; i++) {
+            a = intervalModel(layers[i]); b = plan.arrangeState[i];
+            if (a.layer !== b.layer || a.layer.index !== plan.arrangeIndexes[i]) throw new Error("Arrangement targets changed. Preview again.");
+            for (j = 0; j < names.length; j++) if (a[names[j]] !== b[names[j]]) throw new Error("Arrangement targets changed. Preview again.");
+        }
+        for (i = 0; i < plan.changes.length; i++) if (intervalSignature(plan.changes[i].layer) !== plan.changes[i].intervalSignature) throw new Error("Keyed properties changed after preview. Preview again.");
+    }
     function prepare(request) {
         var context = readContext(), comp = context.comp, layers = [], i, j, k, layer, props, p, path, s, kp, lp, count = 0;
         var plan = {comp:comp,context:context,request:request,changes:[],skips:[],errors:[],notes:[],layerCount:0,mediaLimits:[],keptCrossing:[]};
@@ -707,7 +762,11 @@ var FFHost = (function () {
         for (i = 0; i < layers.length; i++) {
             layer = layers[i];
             if (request.operation === "closeGap" && layer.inPoint < context.cti) continue;
-            lp = interval ? FFCore.intervalLayerPlan(intervalModel(layer),context,request) : (request.mode === "layers" ? FFCore.wholeLayerPlan : FFCore.offsetLayerPlan)({start:layer.startTime,inPoint:layer.inPoint,outPoint:layer.outPoint,locked:layer.locked},context,request);
+            if (request.layerDeltas) {
+                var layerDelta = request.layerDeltas["k"+layer.id];
+                if (Math.abs(layerDelta) <= context.frameDuration*0.000001) continue;
+                lp = FFCore.wholeLayerPlan({start:layer.startTime,inPoint:layer.inPoint,outPoint:layer.outPoint,locked:layer.locked},context,{region:"all",frames:1,direction:layerDelta > 0 ? 1 : -1,deltaSeconds:layerDelta});
+            } else lp = interval ? FFCore.intervalLayerPlan(intervalModel(layer),context,request) : (request.mode === "layers" ? FFCore.wholeLayerPlan : FFCore.offsetLayerPlan)({start:layer.startTime,inPoint:layer.inPoint,outPoint:layer.outPoint,locked:layer.locked},context,request);
             if (lp.kept) plan.keptCrossing.push(layer.id);
             if (lp.skip) { plan.skips.push(labelFor(layer,[])+": "+lp.skip); continue; }
             if (lp.kind === "none") continue;
@@ -745,7 +804,7 @@ var FFHost = (function () {
             } catch (captureError) { failed = errorInfo(captureError).message; }
             if (failed) { plan.skips.push(labelFor(layer,[])+": весь слой пропущен — "+failed); continue; }
             plan.changes.push({kind:lp.kind,layer:layer,before:{start:layer.startTime,inPoint:layer.inPoint,outPoint:layer.outPoint},
-                after:{start:lp.start,inPoint:lp.inPoint,outPoint:lp.outPoint},properties:entries,delta:lp.delta,moved:moved,label:labelFor(layer,[]),intervalSignature:interval ? intervalSignature(layer,props) : null});
+                after:{start:lp.start,inPoint:lp.inPoint,outPoint:lp.outPoint},properties:entries,delta:lp.delta,moved:moved,label:labelFor(layer,[]),intervalSignature:interval || request.layerDeltas ? intervalSignature(layer,props) : null});
         }
         if (request.compMarkers && comp.markerProperty && comp.markerProperty.numKeys && (interval || relevant(comp.markerProperty))) {
             layer = null;
@@ -894,6 +953,7 @@ var FFHost = (function () {
             if (app.project.activeItem !== plan.comp) throw new Error("Активная композиция изменилась; повторите действие");
             if (plan.request.operation === "closeGap") validateGapPlan(plan);
             if (plan.intervalState) validateIntervalPlan(plan);
+            if (plan.arrangeState) validateArrangePlan(plan);
             if (!plan.changes.length) { result.ok = true; return result; }
             phase = "captureSelection"; layerSelection = captureLayerSelection(plan.comp); phase = "preflight";
             for (i = 0; i < plan.changes.length; i++) {
@@ -902,7 +962,7 @@ var FFHost = (function () {
                 if (c.kind !== "property") { checkLayer(c,false,tolerance); verifyLayerProperties(c,false,tolerance); }
                 else verifyProperty(target(c,plan.comp),c.snapshot,originalTimes(c.snapshot),tolerance);
             }
-            app.beginUndoGroup(plan.request.operation === "closeGap" ? "FrameFlow AE 2.3.0 — Убрать паузу" : "FrameFlow AE 2.3.0 — Time Offset"); opened = true;
+            app.beginUndoGroup(plan.arrangement ? "FrameFlow AE 2.4.0 — "+plan.arrangement.action : plan.request.operation === "closeGap" ? "FrameFlow AE 2.4.0 — Убрать паузу" : "FrameFlow AE 2.4.0 — Time Offset"); opened = true;
             for (i = 0; i < plan.changes.length; i++) {
                 phase = "apply"; c = plan.changes[i]; currentChange = c; touched.push(c); result.attempted++;
                 if (c.kind === "layer") {
@@ -973,7 +1033,7 @@ var FFHost = (function () {
         return result;
     }
     function environment() {
-        var lines = ["FrameFlow AE 2.3.0", "Дата: " + new Date().toString()];
+        var lines = ["FrameFlow AE 2.4.0", "Дата: " + new Date().toString()];
         function read(label,fn) { try { lines.push(label+": "+fn()); } catch (ignored) { lines.push(label+": неизвестно"); } }
         read("AE",function(){return app.version;}); read("Build",function(){return app.buildNumber;});
         read("OS",function(){return $.os;}); read("ExtendScript",function(){return $.version;});
@@ -983,7 +1043,7 @@ var FFHost = (function () {
         var lines = environment(), i, r = plan.request, c = plan.context;
         lines.push(heading, "Scope="+r.scope+"; Region="+r.region,
             "Mode="+(r.mode || "offset")+"; Strict="+(r.strict === true)+"; MediaPolicy="+(r.mediaPolicy || "stop"),
-            "Frames="+(r.operation === "closeGap" ? r.gap.frames : r.frames)+"; Direction="+r.direction+"; Delta="+FFCore.offsetSeconds(c,r)+" s",
+            plan.arrangement ? "Arrange="+plan.arrangement.action+"; Order="+plan.arrangement.order+"; Anchor="+plan.arrangement.anchor+"; Frames="+plan.arrangement.frames : "Frames="+(r.operation === "closeGap" ? r.gap.frames : r.frames)+"; Direction="+r.direction+"; Delta="+FFCore.offsetSeconds(c,r)+" s",
             "Comp id="+plan.comp.id+"; FPS="+(1/c.frameDuration)+"; CTI="+c.cti+" s; Duration="+c.duration+" s",
             "К изменению: "+plan.changes.length+"; Пропуски: "+plan.skips.length+"; Блокировки: "+plan.errors.length);
         if (plan.mediaLimits && plan.mediaLimits.length) lines.push("Без запаса исходника: "+plan.mediaLimits.length+". "+(r.mediaPolicy === "skip" ? "Эти слои и все их ключи оставлены без изменений; остальные цели проходят строгую проверку." : "Вся операция отменяется до записи."));
@@ -1011,7 +1071,7 @@ var FFHost = (function () {
             for (i = 0; i < result.recoveryErrors.length; i++) lines.push("ВОССТАНОВЛЕНИЕ НЕ ПОДТВЕРЖДЕНО: "+result.recoveryErrors[i]);
         }
         for (i = 0; i < plan.changes.length && lines.length < LIMITS.reportLines; i++) {
-            lines.push("Цель: "+plan.changes[i].label+(plan.changes[i].kind !== "property" ? "; kind="+plan.changes[i].kind+"; Start/In/Out "+plan.changes[i].after.start+" / "+plan.changes[i].after.inPoint+" / "+plan.changes[i].after.outPoint : "; ключей "+plan.changes[i].moved));
+            lines.push("Цель: "+plan.changes[i].label+(plan.changes[i].kind !== "property" ? "; kind="+plan.changes[i].kind+"; Delta="+plan.changes[i].delta+" s; Start/In/Out "+plan.changes[i].after.start+" / "+plan.changes[i].after.inPoint+" / "+plan.changes[i].after.outPoint : "; ключей "+plan.changes[i].moved));
         }
         for (i = 0; i < plan.errors.length && lines.length < LIMITS.reportLines; i++) lines.push("БЛОК: "+plan.errors[i]);
         for (i = 0; i < plan.skips.length && lines.length < LIMITS.reportLines; i++) lines.push("ПРОПУСК: "+plan.skips[i]);
@@ -1020,8 +1080,9 @@ var FFHost = (function () {
         lines.push("Readback проверяет доступные данные; визуальный результат, недоступные атрибуты и внешние Expressions требуют отдельного теста в AE.");
         return lines.join("\n");
     }
-    return {readContext:readContext,inspectGap:inspectGap,prepareGap:prepareGap,prepareInterval:prepareInterval, prepare:prepare, applyPlan:applyPlan, report:report, environment:environment,
+    return {readContext:readContext,inspectGap:inspectGap,prepareGap:prepareGap,prepareInterval:prepareInterval,prepareArrange:prepareArrange, prepare:prepare, applyPlan:applyPlan, report:report, environment:environment,
         snapshotProperty:snapshotProperty, restoreProperty:restoreProperty, verifyProperty:verifyProperty,
         scanLayer:scanLayer, pathOf:pathOf, errorInfo:errorInfo, originalTimes:originalTimes};
 }());
+
 

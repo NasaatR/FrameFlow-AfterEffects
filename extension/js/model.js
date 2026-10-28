@@ -1,6 +1,6 @@
 (function (root) {
   'use strict';
-  const VERSION = '2.3.0';
+  const VERSION = '2.4.0';
   const defaults = {version:4, language:'en', theme:'dark', font:'system', fontSize:12, rowHeight:32, spacing:3, labelWidth:226, radius:6, accent:'#a7c7ff', motion:false, snap:true, autoRefresh:true, poll:1800, frames:12, mode:'offset', scope:'auto', compMarkers:false, mediaPolicy:'skip', rememberContext:false, units:'timecode', showKinds:true, contrast:'normal', quickSteps:[1,2,5,10,12,24,48]};
   const ranges = {fontSize:[11,16], rowHeight:[30,58], spacing:[0,12], labelWidth:[150,340], radius:[0,12], poll:[1000,5000], frames:[1,1000000]};
   const choices = {language:['en','ru'],theme:['dark','light','host'],font:['system','sans','mono'],mode:['layers','keys','selectedKeys','offset'],scope:['auto','selected','all'],mediaPolicy:['skip','stop'],units:['timecode','frames'],contrast:['normal','high']};
@@ -92,3 +92,4 @@
   const api={VERSION,contrast,accentFor,defaults,ranges,choices,validate,startup,storage,parseSteps,effectiveScope,selected,frame,timecode,parseTime,snapDelta,trimLimit};
   if(typeof module==='object'&&module.exports) module.exports=api; else root.FFModel=api;
 }(typeof window==='object'?window:this));
+
