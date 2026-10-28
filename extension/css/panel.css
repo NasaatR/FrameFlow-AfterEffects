@@ -15,3 +15,5 @@ button,input,textarea{font:inherit;color:inherit}button{border:1px solid transpa
 
 /* Wrap the action strip for large text and localized labels. */
 .utility-row{flex-wrap:wrap;gap:4px}.utility-menus{flex-wrap:wrap;justify-content:flex-end;margin-left:auto;min-width:0;gap:0}.utility-menus button{padding:4px 5px;gap:3px}.arrange-number{width:100px;max-width:45%;text-align:right;font-variant-numeric:tabular-nums}
+
+.dialog-footer{flex:none;padding:8px 10px;border-top:1px solid var(--border)}.dialog-footer .plan-actions,.dialog-footer .operation-actions{display:flex;flex-wrap:wrap;gap:5px;margin:0}.dialog-footer .primary-button{flex:1}.dialog-footer button{font-size:var(--small)}

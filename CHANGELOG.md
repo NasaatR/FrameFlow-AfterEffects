@@ -5,6 +5,7 @@
 - Add Align In/Out to Cursor, Stagger and Sequence with mandatory captured-plan preview, explicit stack/time order and cursor/first-layer anchors. Sequence accepts a zero-frame gap. Preserve subframes, durations, native animation, selection and composition markers.
 - Reuse native whole-layer translation and bounded recovery; validate all targets before writing, including scope, ordering, source/stretch/timing and keyed-property changes. Keep one-shot application and no-replay transport.
 - Show per-target signed shifts, chosen order and composition-boundary counts. Cap browser details without truncating the native plan. Skip property scans and Undo groups for unchanged layouts.
+- Reset dialog scrolling on open and keep preview/apply actions in a separate visible footer, including keyboard focus traversal.
 - Keep the compact bilingual panel; add Arrange to the existing action strip, with wrapping at narrow widths and large type. Expand regression/browser coverage and refresh the roadmap and stale status document.
 - Real AE execution, Undo/Redo, installers and performance on artist projects remain separately unverified.
 

@@ -6,6 +6,7 @@ test('Arrange routes four operations through read-only plans and reports each la
   for(const action of ['alignIn','alignOut','stagger','sequence']){
     h.$('arrange-menu').click();h.$('menu').querySelector('[data-choice="'+action+'"]').click();assert.ok(h.$('arrange-preview'));assert.equal(f.groups(),0);
     h.$('arrange-preview').click();await h.settle();assert.ok(h.$('apply-preview'));assert.equal(f.groups(),0);assert.match(h.$('dialog-body').textContent,/Whole layer/);
+    assert.equal(h.$('dialog-body').scrollTop,0);assert.equal(h.$('apply-preview').parentElement.parentElement,h.$('dialog-footer'));h.$('dialog-body').scrollTop=300;
     if(action==='stagger'){assert.match(h.$('dialog-body').textContent,/\+96 frames/);assert.match(h.$('dialog-body').textContent,/−36 frames/);assert.match(h.$('dialog-body').textContent,/Top → Bottom/);}
     h.$('close-dialog').click();
   }
@@ -28,7 +29,7 @@ function harness(host,options={}){
     constructor(tag='div',attrs={}){this.tagName=tag.toUpperCase();this.attrs=attrs;this.children=[];this.parentElement=null;this.listeners={};this.style={setProperty(k,v){this[k]=v;}};this._text='';this.value=attrs.value||'';this.hidden='hidden'in attrs;this.checked='checked'in attrs;this.disabled='disabled'in attrs;this.scrollLeft=0;this.scrollTop=0;this.clientWidth=1180;this.clientHeight=450;this.offsetWidth=250;this.offsetHeight=150;this.dataset={};for(const k of Object.keys(attrs))if(k.startsWith('data-'))this.dataset[k.slice(5).replace(/-([a-z])/g,(_,x)=>x.toUpperCase())]=attrs[k];}
     get className(){return this.attrs.class||'';}set className(v){this.attrs.class=v;}
     get classList(){const node=this;return {contains:k=>node.className.split(/\s+/).includes(k),toggle(k,on){const parts=new Set(node.className.split(/\s+/).filter(Boolean));if(on===undefined)on=!parts.has(k);if(on)parts.add(k);else parts.delete(k);node.className=[...parts].join(' ');},add(k){this.toggle(k,true);},remove(k){this.toggle(k,false);}};}
-    append(...children){for(const child of children){child.parentElement=this;this.children.push(child);}}
+    append(...children){for(const child of children){if(child.parentElement)child.parentElement.children=child.parentElement.children.filter(c=>c!==child);child.parentElement=this;this.children.push(child);}}
     get innerHTML(){return this._html||'';}set innerHTML(html){this._html=html;this.children=[];this._text='';parse(html,this);}
     get textContent(){return this._text+this.children.map(c=>c.textContent).join('');}set textContent(v){this.children=[];this._text=String(v);}
     get nextElementSibling(){const a=this.parentElement.children;return a[a.indexOf(this)+1]||null;}
