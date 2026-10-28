@@ -1,8 +1,8 @@
 {
   "product": "FrameFlow AE",
   "version": "2.4.0",
-  "checkedAt": "2026-10-28T23:34:04.950905+00:00",
-  "sourceRef": "local working tree before publication",
+  "checkedAt": "2026-10-28T23:35:38.650876+00:00",
+  "sourceRef": "de202d7c328ca436223f8bc020623256691f57c5",
   "target": "After Effects 25.x–26.x / CEP 12 / Windows and macOS",
   "checks": {
     "tests": {
@@ -69,7 +69,109 @@
     "actualAE_CEP": "not_run: no actual AE connection",
     "actualClipboard": "not_run: DOM/API simulations only",
     "actualWindowsMacOSInstallers": "not_run: source and shell syntax only",
-    "realBrowserLayout": "not_run for this build",
+    "realBrowserLayout": {
+      "version": "2.4.0",
+      "sourceRef": "de202d7c328ca436223f8bc020623256691f57c5",
+      "engine": "Chromium",
+      "host": "simulated AE/CEP fixture; no actual Adobe connection",
+      "checks": [
+        {
+          "name": "English default and reduced controls",
+          "status": "pass"
+        },
+        {
+          "name": "all main commands fit the default 360x290 panel",
+          "status": "pass"
+        },
+        {
+          "name": "no horizontal overflow at 320",
+          "status": "pass"
+        },
+        {
+          "name": "no horizontal overflow at 360",
+          "status": "pass"
+        },
+        {
+          "name": "no horizontal overflow at 650",
+          "status": "pass"
+        },
+        {
+          "name": "preview is read-only and Apply executes the captured plan once",
+          "status": "pass"
+        },
+        {
+          "name": "changed AE cursor rejects the captured plan without writing",
+          "status": "pass"
+        },
+        {
+          "name": "Time menu opens an explicit interval policy before read-only preview",
+          "status": "pass"
+        },
+        {
+          "name": "Arrange policies preview without writing and show per-layer shifts",
+          "status": "pass"
+        },
+        {
+          "name": "Sequence zero gap validates its draft and applies in explicit reverse order",
+          "status": "pass"
+        },
+        {
+          "name": "language changes settings and main immediately and survives reopen",
+          "status": "pass"
+        },
+        {
+          "name": "large Russian text and settings fit 320x280 without horizontal overflow",
+          "status": "pass"
+        },
+        {
+          "name": "Russian Arrange dialog with large text fits 320x280 and keeps keyboard focus",
+          "status": "pass"
+        },
+        {
+          "name": "long mode labels and maximum frame step do not overflow",
+          "status": "pass"
+        },
+        {
+          "name": "mode menu stays inside 320x280 and Escape restores focus",
+          "status": "pass"
+        },
+        {
+          "name": "theme text contrast meets 4.5 to 1",
+          "status": "pass"
+        },
+        {
+          "name": "no unhandled browser errors",
+          "status": "pass"
+        }
+      ],
+      "screenshots": [
+        "main-dark.png",
+        "plan-dark.png",
+        "arrange-policy.png",
+        "arrange-plan.png",
+        "settings-light.png",
+        "main-russian.png",
+        "arrange-russian.png"
+      ],
+      "sourceHashes": {
+        "extension/index.html": "766aaeb684fb7c116871a19c5ac9baa6c38d66bfe5c741e5be3593cf76fd6553",
+        "extension/css/panel.css": "28165ca510d25543c9752ca93d2037b1897ef7e6dbdcdc472517f92540137863",
+        "extension/js/bridge.js": "65d9de5fcca5168a14aad2679af477438bcea9b653d93b0b7b9b17b71a12dc7c",
+        "extension/js/demo.js": "93511f935e1884940b724137a7d352f5e641e3c8334fc42fd494cd3248d50191",
+        "extension/js/i18n.js": "7121b42f6f993f644997a70581826a7b1f68995b7a356afb8321e562ee7b4d39",
+        "extension/js/model.js": "a8ca45faff4efdae8e67a6981625fad5b05d9f8396adc40ed11bc43490af08f7",
+        "extension/js/panel.js": "7fa50b9fe1fc9abe499f83299558e580e1e5ce96006f6da1d9d5ca7e931f9c05",
+        "extension/jsx/host.jsx": "4afaee24a540b474d06323dc055eac1d552fc00fc59e6b6811e405240aa5aa88",
+        "src/core.jsxinc": "ac53230a01c72ee2e3f18370deb67cdeec9d0e148e6957d40a2df61aa0441717",
+        "src/panel-host.jsxinc": "9ec03c08a10612168cbc9d702c48fd66e823e569c8a7698cf3c7115f180e801e",
+        "tests/host-fixture.cjs": "cf5b9c6a5e9a977b27b8c013769b27470ddead63672079bd78b1863e76ff74d3",
+        "tools/browser-check.cjs": "d55d2dcfe8d8b51bc38b4fe2063d19440c3735d1c34b2de5d987a0464ac81068"
+      },
+      "browserVersion": "151.0.7922.34",
+      "status": "pass",
+      "passed": 17,
+      "failed": 0
+    },
     "review": "self-review only"
   },
   "sourceFiles": {
@@ -83,7 +185,7 @@
     "docs/AE_SMOKE_TEST_RU.md": "e10ff892c9ce8eb7c3fb43b25dde1ff9d4808fc3e38c2d8902670df68fd051ea",
     "docs/SOURCES.md": "4ada45c84e3ae959dce764ce420b1a18ccaa502215c963eb0e74b947315c14fc",
     "docs/STATUS.md": "baea77db0bb2dc053ab602b9591bc4326aa762080c11cb23d3253e77878c9d17",
-    "docs/verification.log": "4c2fe54039800890c58794e94e83d714ee1aeb7668287d07546dd3098e05b4cd",
+    "docs/verification.log": "54fbcc7c8276eee6a854b8c6b1a3bcac7a4d278941408fa80562771133a91680",
     "extension/CSXS/manifest.xml": "0a8d861a6b8da7b05deb07aff34defa8fb0c8de988d91151a71017579ff4bbb2",
     "extension/css/panel.css": "28165ca510d25543c9752ca93d2037b1897ef7e6dbdcdc472517f92540137863",
     "extension/index.html": "766aaeb684fb7c116871a19c5ac9baa6c38d66bfe5c741e5be3593cf76fd6553",
