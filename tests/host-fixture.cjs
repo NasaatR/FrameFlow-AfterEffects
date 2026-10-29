@@ -2,6 +2,7 @@
 const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict'),path=require('node:path');
 const source=fs.readFileSync(path.join(__dirname,'../extension/jsx/host.jsx'),'utf8');
 function fixture(options={}){
+  const hostSource=options.hostSource||source;
   let nextId=100,undo=0,groups=0,writes=0,failed=false,loads=0,failOffset=false;
   const types={OneD:1,TwoD:2,ThreeD:3,TwoD_SPATIAL:4,ThreeD_SPATIAL:5,COLOR:6,LAYER_INDEX:7,MASK_INDEX:8,SHAPE:9,TEXT_DOCUMENT:10,MARKER:11};
   function CompItem(){}const comp=new CompItem();comp.items=[];
@@ -28,11 +29,11 @@ function fixture(options={}){
   const ctx={app,CompItem,PropertyValueType:types,PropertyType:{PROPERTY:1},KeyframeInterpolationType:{BEZIER:2},KeyframeEase:function(speed,influence){this.speed=speed;this.influence=influence;},$:{os:'Test OS',version:'test'}};
   ctx.$.global=options.detachedGlobal?{}:ctx;
   ctx.File=function(file){this.fsName=file;this.exists=options.missingHost!==true;};
-  ctx.$.evalFile=function(file){loads++;if(options.loadError)throw options.loadError;return vm.runInContext(options.evalFileScope==='global'?source:'(function(){\n'+source+'\n}());',ctx,{filename:file.fsName});};
-  vm.createContext(ctx);if(!options.unloaded)vm.runInContext(source,ctx);
+  ctx.$.evalFile=function(file){loads++;if(options.loadError)throw options.loadError;return vm.runInContext(options.evalFileScope==='global'?hostSource:'(function(){\n'+hostSource+'\n}());',ctx,{filename:file.fsName});};
+  vm.createContext(ctx);if(!options.unloaded)vm.runInContext(hostSource,ctx);
   let count=0;
   function raw(text){return JSON.parse(ctx.$.global.FrameFlowCEP.dispatch(encodeURIComponent(text)));}
-  function call(data,id){return raw(JSON.stringify({id:id||'test:'+(++count),version:'2.4.0',data}));}
+  function call(data,id){return raw(JSON.stringify({id:id||'test:'+(++count),version:'2.4.2',data}));}
   function state(){const r=call({op:'read'});assert.equal(r.ok,true,r.error&&r.error.message);return r.data.state;}
   function action(op,extra={}){return call({op,token:state().token,ids:[101],...extra});}
   return {ctx,comp,app,call,raw,state,action,injectOffsetFailure(){failOffset=true;},addLayer(inPoint,outPoint){const l=make(inPoint,outPoint);comp.items.push(l);return l;},writes:()=>writes,undo:()=>undo,groups:()=>groups,loads:()=>loads};

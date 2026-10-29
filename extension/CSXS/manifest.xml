@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<ExtensionManifest Version="7.0" ExtensionBundleId="com.frameflow.ae" ExtensionBundleVersion="2.4.0" ExtensionBundleName="FrameFlow">
-  <ExtensionList><Extension Id="com.frameflow.ae.panel" Version="2.4.0"/></ExtensionList>
+<ExtensionManifest Version="7.0" ExtensionBundleId="com.frameflow.ae" ExtensionBundleVersion="2.4.2" ExtensionBundleName="FrameFlow">
+  <ExtensionList><Extension Id="com.frameflow.ae.panel" Version="2.4.2"/></ExtensionList>
   <ExecutionEnvironment>
     <HostList><Host Name="AEFT" Version="[25.0,26.9]"/></HostList>
     <LocaleList><Locale Code="All"/></LocaleList>

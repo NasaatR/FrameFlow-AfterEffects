@@ -234,7 +234,7 @@ var FFCore = (function () {
         parseFavorites:favorites, defaults:defaults, parseSettings:parseSettings, encodeSettings:encodeSettings};
 }());
 
-/* FrameFlow AE 2.4.0. AE adapter; native values never pass through JSON. */
+/* FrameFlow AE 2.4.2. AE adapter; native values never pass through JSON. */
 var FFHost = (function () {
     var LIMITS = {properties:20000, keys:50000, reportLines:300, textCharacters:2000};
     var ROOTS = ["ADBE Transform Group", "ADBE Mask Parade", "ADBE Effect Parade", "ADBE MTrackers",
@@ -962,7 +962,7 @@ var FFHost = (function () {
                 if (c.kind !== "property") { checkLayer(c,false,tolerance); verifyLayerProperties(c,false,tolerance); }
                 else verifyProperty(target(c,plan.comp),c.snapshot,originalTimes(c.snapshot),tolerance);
             }
-            app.beginUndoGroup(plan.arrangement ? "FrameFlow AE 2.4.0 — "+plan.arrangement.action : plan.request.operation === "closeGap" ? "FrameFlow AE 2.4.0 — Убрать паузу" : "FrameFlow AE 2.4.0 — Time Offset"); opened = true;
+            app.beginUndoGroup(plan.arrangement ? "FrameFlow AE 2.4.2 — "+plan.arrangement.action : plan.request.operation === "closeGap" ? "FrameFlow AE 2.4.2 — Убрать паузу" : "FrameFlow AE 2.4.2 — Time Offset"); opened = true;
             for (i = 0; i < plan.changes.length; i++) {
                 phase = "apply"; c = plan.changes[i]; currentChange = c; touched.push(c); result.attempted++;
                 if (c.kind === "layer") {
@@ -1033,7 +1033,7 @@ var FFHost = (function () {
         return result;
     }
     function environment() {
-        var lines = ["FrameFlow AE 2.4.0", "Дата: " + new Date().toString()];
+        var lines = ["FrameFlow AE 2.4.2", "Дата: " + new Date().toString()];
         function read(label,fn) { try { lines.push(label+": "+fn()); } catch (ignored) { lines.push(label+": неизвестно"); } }
         read("AE",function(){return app.version;}); read("Build",function(){return app.buildNumber;});
         read("OS",function(){return $.os;}); read("ExtendScript",function(){return $.version;});

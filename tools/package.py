@@ -82,7 +82,7 @@ def main():
         'target': 'After Effects 25.x–26.x / CEP 12 / Windows and macOS',
         'checks': {
             'tests': test_summary,
-            'testScope': 'strict ES3; pure timing; simulated AE/CEP/DOM; scoped evalFile; RPC; clipboard and connection recovery',
+            'testScope': 'strict ES3; catalogue/module extension contracts; pure timing; simulated AE/CEP/DOM; scoped evalFile; RPC; clipboard and connection recovery',
             'hostSyntax': syntax['reports'],
             'frontendSyntax': 'node --check for all extension/js files passed',
             'manifestAndLocalPaths': 'passed', 'macOSInstallerSyntax': 'bash -n passed',

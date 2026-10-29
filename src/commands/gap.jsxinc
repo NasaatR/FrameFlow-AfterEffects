@@ -1,0 +1,6 @@
+/* Plan-only handler; included inside the private CEP dispatcher at build time. */
+registerPlan("gap", function (c,r) {
+    schema(r, "|op||token||scope||compMarkers||preview|");
+    if (r.scope !== "auto" && r.scope !== "all" && r.scope !== "selected") fail("Область не распознана.");
+    bool(r.compMarkers); return FFHost.prepareGap(r);
+}, true);

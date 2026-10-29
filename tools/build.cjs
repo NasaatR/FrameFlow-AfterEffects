@@ -3,7 +3,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const root = path.resolve(__dirname, '..');
 const core = fs.readFileSync(path.join(root, 'src/core.jsxinc'), 'utf8');
-const host = fs.readFileSync(path.join(root, 'src/panel-host.jsxinc'), 'utf8');
+const {compileHost}=require('./command-modules.cjs');
+const host = compileHost(root);
 // CEP already selects the host. Ship plain ES3, including the first byte:
 // ScriptPath/string evaluation must not depend on preprocessing #target.
 // evalFile may inherit a function scope. Register the completed API explicitly;

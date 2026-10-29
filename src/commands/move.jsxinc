@@ -1,0 +1,7 @@
+/* Plan-only handler; included inside the private CEP dispatcher at build time. */
+registerPlan("move", function (c,r) {
+    schema(r, "|op||token||ids||scope||deltaFrames||mode||frames||region||direction||compMarkers||mediaPolicy||preview|");
+    targets(c, r.ids, false);
+    number(r.deltaFrames, -1000000, 1000000, false); if (r.deltaFrames === 0) fail("Сдвиг равен нулю.");
+    return FFHost.prepare({mode:"layers", region:"all", scope:"selected", layerIds:r.ids, direction:r.deltaFrames > 0 ? 1 : -1, deltaSeconds:r.deltaFrames * c.frameDuration, frames:1, strict:true});
+}, true);

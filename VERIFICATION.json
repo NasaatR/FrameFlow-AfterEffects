@@ -1,22 +1,102 @@
 {
   "product": "FrameFlow AE",
-  "version": "2.4.0",
-  "checkedAt": "2026-10-28T23:35:38.650876+00:00",
-  "sourceRef": "de202d7c328ca436223f8bc020623256691f57c5",
+  "version": "2.4.2",
+  "checkedAt": "2026-10-29T02:45:58.930708+00:00",
+  "sourceRef": "local working tree before publication",
   "target": "After Effects 25.x–26.x / CEP 12 / Windows and macOS",
   "checks": {
     "tests": {
-      "tests": 216,
-      "pass": 216,
+      "tests": 229,
+      "pass": 229,
       "fail": 0,
       "skipped": 0,
       "cancelled": 0
     },
-    "testScope": "strict ES3; pure timing; simulated AE/CEP/DOM; scoped evalFile; RPC; clipboard and connection recovery",
+    "testScope": "strict ES3; catalogue/module extension contracts; pure timing; simulated AE/CEP/DOM; scoped evalFile; RPC; clipboard and connection recovery",
     "hostSyntax": [
       {
         "file": "extension/jsx/host.jsx",
-        "sha256": "4afaee24a540b474d06323dc055eac1d552fc00fc59e6b6811e405240aa5aa88",
+        "sha256": "923f4d42cb5f824aeb626a6efe0f52335eaf38bfc1a0415de2b3214ccf7f29b1",
+        "parser": "Acorn 8.18.0",
+        "options": {
+          "ecmaVersion": 3,
+          "allowReserved": "never",
+          "sourceType": "script",
+          "locations": true,
+          "allowHashBang": false
+        },
+        "reservedIdentifierPolicy": "ECMA-262 edition 3 keywords/future reserved words; v1",
+        "profile": "conservative ES3 syntax; not ExtendScript or AE runtime verification",
+        "status": "pass",
+        "directives": []
+      },
+      {
+        "file": "src/commands/arrange.jsxinc",
+        "sha256": "fc42a7dd1bb05286bd31530845a205f9d324459f75c6ed1e20e450c562c9640f",
+        "parser": "Acorn 8.18.0",
+        "options": {
+          "ecmaVersion": 3,
+          "allowReserved": "never",
+          "sourceType": "script",
+          "locations": true,
+          "allowHashBang": false
+        },
+        "reservedIdentifierPolicy": "ECMA-262 edition 3 keywords/future reserved words; v1",
+        "profile": "conservative ES3 syntax; not ExtendScript or AE runtime verification",
+        "status": "pass",
+        "directives": []
+      },
+      {
+        "file": "src/commands/gap.jsxinc",
+        "sha256": "ebcb4686d943cb6fd32dac9751cea2d2e3556be618ca8de81352a09439c722e5",
+        "parser": "Acorn 8.18.0",
+        "options": {
+          "ecmaVersion": 3,
+          "allowReserved": "never",
+          "sourceType": "script",
+          "locations": true,
+          "allowHashBang": false
+        },
+        "reservedIdentifierPolicy": "ECMA-262 edition 3 keywords/future reserved words; v1",
+        "profile": "conservative ES3 syntax; not ExtendScript or AE runtime verification",
+        "status": "pass",
+        "directives": []
+      },
+      {
+        "file": "src/commands/interval.jsxinc",
+        "sha256": "a5537a1a6e56c7176ac5897e37f7fa4bb30d55ca2a529d691d4d8d62a172bd75",
+        "parser": "Acorn 8.18.0",
+        "options": {
+          "ecmaVersion": 3,
+          "allowReserved": "never",
+          "sourceType": "script",
+          "locations": true,
+          "allowHashBang": false
+        },
+        "reservedIdentifierPolicy": "ECMA-262 edition 3 keywords/future reserved words; v1",
+        "profile": "conservative ES3 syntax; not ExtendScript or AE runtime verification",
+        "status": "pass",
+        "directives": []
+      },
+      {
+        "file": "src/commands/move.jsxinc",
+        "sha256": "fdad0a6b8bb825ab7ef25d2aa8d5b3fd29bd32520342cb7bc118824a6cef63a9",
+        "parser": "Acorn 8.18.0",
+        "options": {
+          "ecmaVersion": 3,
+          "allowReserved": "never",
+          "sourceType": "script",
+          "locations": true,
+          "allowHashBang": false
+        },
+        "reservedIdentifierPolicy": "ECMA-262 edition 3 keywords/future reserved words; v1",
+        "profile": "conservative ES3 syntax; not ExtendScript or AE runtime verification",
+        "status": "pass",
+        "directives": []
+      },
+      {
+        "file": "src/commands/offset.jsxinc",
+        "sha256": "6e1063030373ea674c311f703d788c604b158b488845ff978331f306f0305dce",
         "parser": "Acorn 8.18.0",
         "options": {
           "ecmaVersion": 3,
@@ -32,7 +112,7 @@
       },
       {
         "file": "src/core.jsxinc",
-        "sha256": "ac53230a01c72ee2e3f18370deb67cdeec9d0e148e6957d40a2df61aa0441717",
+        "sha256": "585892145758026f0eb04b6aa398ccb111b18023e3352f05d4e7ae0036846b8c",
         "parser": "Acorn 8.18.0",
         "options": {
           "ecmaVersion": 3,
@@ -48,7 +128,7 @@
       },
       {
         "file": "src/panel-host.jsxinc",
-        "sha256": "9ec03c08a10612168cbc9d702c48fd66e823e569c8a7698cf3c7115f180e801e",
+        "sha256": "677d9a82fc7425d1532aeffe6961bbee41aa026801dbeececdfe7bbb97f3a883",
         "parser": "Acorn 8.18.0",
         "options": {
           "ecmaVersion": 3,
@@ -69,154 +149,63 @@
     "actualAE_CEP": "not_run: no actual AE connection",
     "actualClipboard": "not_run: DOM/API simulations only",
     "actualWindowsMacOSInstallers": "not_run: source and shell syntax only",
-    "realBrowserLayout": {
-      "version": "2.4.0",
-      "sourceRef": "de202d7c328ca436223f8bc020623256691f57c5",
-      "engine": "Chromium",
-      "host": "simulated AE/CEP fixture; no actual Adobe connection",
-      "checks": [
-        {
-          "name": "English default and reduced controls",
-          "status": "pass"
-        },
-        {
-          "name": "all main commands fit the default 360x290 panel",
-          "status": "pass"
-        },
-        {
-          "name": "no horizontal overflow at 320",
-          "status": "pass"
-        },
-        {
-          "name": "no horizontal overflow at 360",
-          "status": "pass"
-        },
-        {
-          "name": "no horizontal overflow at 650",
-          "status": "pass"
-        },
-        {
-          "name": "preview is read-only and Apply executes the captured plan once",
-          "status": "pass"
-        },
-        {
-          "name": "changed AE cursor rejects the captured plan without writing",
-          "status": "pass"
-        },
-        {
-          "name": "Time menu opens an explicit interval policy before read-only preview",
-          "status": "pass"
-        },
-        {
-          "name": "Arrange policies preview without writing and show per-layer shifts",
-          "status": "pass"
-        },
-        {
-          "name": "Sequence zero gap validates its draft and applies in explicit reverse order",
-          "status": "pass"
-        },
-        {
-          "name": "language changes settings and main immediately and survives reopen",
-          "status": "pass"
-        },
-        {
-          "name": "large Russian text and settings fit 320x280 without horizontal overflow",
-          "status": "pass"
-        },
-        {
-          "name": "Russian Arrange dialog with large text fits 320x280 and keeps keyboard focus",
-          "status": "pass"
-        },
-        {
-          "name": "long mode labels and maximum frame step do not overflow",
-          "status": "pass"
-        },
-        {
-          "name": "mode menu stays inside 320x280 and Escape restores focus",
-          "status": "pass"
-        },
-        {
-          "name": "theme text contrast meets 4.5 to 1",
-          "status": "pass"
-        },
-        {
-          "name": "no unhandled browser errors",
-          "status": "pass"
-        }
-      ],
-      "screenshots": [
-        "main-dark.png",
-        "plan-dark.png",
-        "arrange-policy.png",
-        "arrange-plan.png",
-        "settings-light.png",
-        "main-russian.png",
-        "arrange-russian.png"
-      ],
-      "sourceHashes": {
-        "extension/index.html": "766aaeb684fb7c116871a19c5ac9baa6c38d66bfe5c741e5be3593cf76fd6553",
-        "extension/css/panel.css": "28165ca510d25543c9752ca93d2037b1897ef7e6dbdcdc472517f92540137863",
-        "extension/js/bridge.js": "65d9de5fcca5168a14aad2679af477438bcea9b653d93b0b7b9b17b71a12dc7c",
-        "extension/js/demo.js": "93511f935e1884940b724137a7d352f5e641e3c8334fc42fd494cd3248d50191",
-        "extension/js/i18n.js": "7121b42f6f993f644997a70581826a7b1f68995b7a356afb8321e562ee7b4d39",
-        "extension/js/model.js": "a8ca45faff4efdae8e67a6981625fad5b05d9f8396adc40ed11bc43490af08f7",
-        "extension/js/panel.js": "7fa50b9fe1fc9abe499f83299558e580e1e5ce96006f6da1d9d5ca7e931f9c05",
-        "extension/jsx/host.jsx": "4afaee24a540b474d06323dc055eac1d552fc00fc59e6b6811e405240aa5aa88",
-        "src/core.jsxinc": "ac53230a01c72ee2e3f18370deb67cdeec9d0e148e6957d40a2df61aa0441717",
-        "src/panel-host.jsxinc": "9ec03c08a10612168cbc9d702c48fd66e823e569c8a7698cf3c7115f180e801e",
-        "tests/host-fixture.cjs": "cf5b9c6a5e9a977b27b8c013769b27470ddead63672079bd78b1863e76ff74d3",
-        "tools/browser-check.cjs": "d55d2dcfe8d8b51bc38b4fe2063d19440c3735d1c34b2de5d987a0464ac81068"
-      },
-      "browserVersion": "151.0.7922.34",
-      "status": "pass",
-      "passed": 17,
-      "failed": 0
-    },
+    "realBrowserLayout": "not_run for this build",
     "review": "self-review only"
   },
   "sourceFiles": {
-    ".github/workflows/validate.yml": "9e65bc09d74997e345ee5b319da3845aac219a7b52d10c5f6b5026c80b03bc5a",
+    ".github/workflows/validate.yml": "0e57a077cb2a9a1d443187769534448d307c9a9f2da142bbfdf12281c7a4f661",
     ".gitignore": "8853fe1710f63b79e45901adca767b266ccdad7fb088a20f11003a91a6612ee9",
-    "CHANGELOG.md": "58c81dabe9673717be332d5b6881f8be443c6fc8db16f52a74eb93cbdf22ce48",
-    "PREVIEW.html": "d7ec7968ca94eb24aea46936a54a5882b7baef0b365736955666ddea05fa0b58",
-    "README.md": "84241c5373af6301e52eb6ad467f8ffc85c1c2df33c302acc6613c5db21da14d",
-    "README_RU.md": "22a5f6247591a7b2b2796343202833168ca6f602d193895d8a25661aee4dc2d1",
-    "ROADMAP_RU.md": "0e3889d4a1dc2bf089623a2601d195add525539561f224d5e06c4e6a7180de6f",
-    "docs/AE_SMOKE_TEST_RU.md": "e10ff892c9ce8eb7c3fb43b25dde1ff9d4808fc3e38c2d8902670df68fd051ea",
+    "AGENTS.md": "ab1ab927cb695c81445744a892680f0496725ce24c5fb4f4ecdde0f7bf88f8cc",
+    "CHANGELOG.md": "4d14ddcfd4e3e3ea99a786a82a6f951666a3b808584eb86d6ceee0abcb4ffe62",
+    "PREVIEW.html": "043ba64f41d0eafddeeadfa8761a4e7d611a2fe468cc8ee3286a10fb0f92ca67",
+    "README.md": "160d78aa5df98dd97c67ed4f8a1d17cf1db99009a000a93e0f05dd74c714ecf2",
+    "README_RU.md": "bf588e5b998a0a073163936e4bdb4f2a7245235a1fd4f8125b71086067e2c2c4",
+    "ROADMAP_RU.md": "14bca2b5a713f2aed0bff3521e41d70f5d991a5c5642976838d2b64f05700ecd",
+    "docs/AE_SMOKE_TEST_RU.md": "2393849755861f4680a4cb4ff38bedbe228206176456ab2be08f6317b8dc591c",
+    "docs/EXTENDING.md": "9ef389b4d799ea9a84b61d7bd52d03fae347104eb6f200d53c897c69d58f258b",
     "docs/SOURCES.md": "4ada45c84e3ae959dce764ce420b1a18ccaa502215c963eb0e74b947315c14fc",
-    "docs/STATUS.md": "baea77db0bb2dc053ab602b9591bc4326aa762080c11cb23d3253e77878c9d17",
-    "docs/verification.log": "54fbcc7c8276eee6a854b8c6b1a3bcac7a4d278941408fa80562771133a91680",
-    "extension/CSXS/manifest.xml": "0a8d861a6b8da7b05deb07aff34defa8fb0c8de988d91151a71017579ff4bbb2",
-    "extension/css/panel.css": "28165ca510d25543c9752ca93d2037b1897ef7e6dbdcdc472517f92540137863",
-    "extension/index.html": "766aaeb684fb7c116871a19c5ac9baa6c38d66bfe5c741e5be3593cf76fd6553",
-    "extension/js/bridge.js": "65d9de5fcca5168a14aad2679af477438bcea9b653d93b0b7b9b17b71a12dc7c",
-    "extension/js/demo.js": "93511f935e1884940b724137a7d352f5e641e3c8334fc42fd494cd3248d50191",
-    "extension/js/i18n.js": "7121b42f6f993f644997a70581826a7b1f68995b7a356afb8321e562ee7b4d39",
-    "extension/js/model.js": "a8ca45faff4efdae8e67a6981625fad5b05d9f8396adc40ed11bc43490af08f7",
-    "extension/js/panel.js": "7fa50b9fe1fc9abe499f83299558e580e1e5ce96006f6da1d9d5ca7e931f9c05",
-    "extension/jsx/host.jsx": "4afaee24a540b474d06323dc055eac1d552fc00fc59e6b6811e405240aa5aa88",
+    "docs/STATUS.md": "e1eb15eda902e2d46e878acf9edced014c17cff0de50f422aef3a9faecaca81d",
+    "docs/verification.log": "576f1386f73dbdd32838e6a55c840f2a9903c656425a83a29451c185625356a6",
+    "extension/CSXS/manifest.xml": "0c3f888bd48f47818d850c871508ea50e5eff11bc3219ae161d9003800b44228",
+    "extension/css/panel.css": "886c26fff1303f57de8cbf5f12cebfedef0332a4204cae910f50dacec1048007",
+    "extension/index.html": "c14e301a625ee6ce83cb19551d6de7b439504ea233d1c592af7864a3b8f61fee",
+    "extension/js/bridge.js": "5ea7c7081c5956effe683c676a454e24cb8b91fbfe619d35c8a7db7384d2025b",
+    "extension/js/commands.js": "891e384611a1c1fe68d807622955db17183d3c9454be8e64c6f0a0c79441f903",
+    "extension/js/demo.js": "b8ec484318034e46c4e4da1f45ccea1296b324d2aed7d5585a04ee853d301bfe",
+    "extension/js/i18n.js": "a70071a8f82bbb585c05d001425886e40a8cb0525a495cd3006e059d47a5ecf5",
+    "extension/js/model.js": "b27d2a0b08909a0dbc6a1ff01fa6902b47a0a16f57ae99864ce39eaf2420c171",
+    "extension/js/panel.js": "16f9dff16057a64a4276afde20d0d54f819dd0e627a6e3e7dc936812a79f87f6",
+    "extension/js/ui.js": "cfcd848f939b5bcd8a3a341ce06d022e81a523ced94a0316e3a8f80b494c4789",
+    "extension/jsx/host.jsx": "923f4d42cb5f824aeb626a6efe0f52335eaf38bfc1a0415de2b3214ccf7f29b1",
     "install/Install-Windows.cmd": "69261ffd90b8eb9c0ae854c9c704320df497f80a922cdb98dbd01ca6832dea6e",
     "install/Install-Windows.ps1": "771126bcc6afed22435b3336c204c7fd3dd15cceefc6f60be9e2e1ccf9b85ed7",
     "install/Install-macOS.command": "a5e11aa15ee08451907a4e2de35cffa610327f55980179bf9918ace8b1b56c02",
     "install/RESTORE_MACOS_RU.md": "e9cd081b33d397af9953a263f97df4c7bfd2d1cac43d1b049c12ed278ecaab56",
     "install/Restore-Windows.cmd": "65b209c003922d123dbbdc4ef025936bf4fb3fccc1f1c7954c329c9d43fc4a06",
     "install/Restore-Windows.ps1": "893b5af85b7e475adf1c1cf192c1c2ef3c59bdd24a510dad79d05e3ca1b16692",
-    "package.json": "c263acc8334a051fd8bdeddfb78b884bcca2395b48f945ea51c28893b9bb2312",
-    "src/core.jsxinc": "ac53230a01c72ee2e3f18370deb67cdeec9d0e148e6957d40a2df61aa0441717",
-    "src/panel-host.jsxinc": "9ec03c08a10612168cbc9d702c48fd66e823e569c8a7698cf3c7115f180e801e",
+    "package.json": "b1efdc65e718f6cf548ea94c6ab68cbf9816d85b21db8376c67d339a724b9ea4",
+    "src/commands/arrange.jsxinc": "fc42a7dd1bb05286bd31530845a205f9d324459f75c6ed1e20e450c562c9640f",
+    "src/commands/gap.jsxinc": "ebcb4686d943cb6fd32dac9751cea2d2e3556be618ca8de81352a09439c722e5",
+    "src/commands/interval.jsxinc": "a5537a1a6e56c7176ac5897e37f7fa4bb30d55ca2a529d691d4d8d62a172bd75",
+    "src/commands/move.jsxinc": "fdad0a6b8bb825ab7ef25d2aa8d5b3fd29bd32520342cb7bc118824a6cef63a9",
+    "src/commands/offset.jsxinc": "6e1063030373ea674c311f703d788c604b158b488845ff978331f306f0305dce",
+    "src/core.jsxinc": "585892145758026f0eb04b6aa398ccb111b18023e3352f05d4e7ae0036846b8c",
+    "src/panel-host.jsxinc": "677d9a82fc7425d1532aeffe6961bbee41aa026801dbeececdfe7bbb97f3a883",
     "tests/arrange.cjs": "944c90ea85aca3db74e58f843ad1c72eaa98a4d54a690d660b3e6c7219e7b36f",
     "tests/bootstrap.cjs": "bf6c6f26a80f70f86bfb19c12d7a8bbd2d03a738d4131bf685c8e2c49998e22e",
+    "tests/commands.cjs": "ee8b000b28ea2ec8fe06fb6a9e32feb0e1fc8a9ba3ee0c3501ffa90d6e109a76",
     "tests/es3.cjs": "aabcbec36af13a6eef0a058f2785aa0ae2bd5fa7876e02a080f8b6b55589875a",
-    "tests/frontend.cjs": "fcc0e89da10ae40ed24273db1efda710f53e2aa41f3dbc664bd056a4912de03f",
-    "tests/host-fixture.cjs": "cf5b9c6a5e9a977b27b8c013769b27470ddead63672079bd78b1863e76ff74d3",
-    "tests/host.cjs": "2fbfaf3b91528df2ed14fac6c96d24d1d9c527dc62eac5b308691b6bd15edc8e",
+    "tests/frontend.cjs": "fcd564c941ee24c148a065c8cf54ab251d96de86a570f8904d0620342edd4f03",
+    "tests/host-fixture.cjs": "94cadab07de196398e5867dbb3b9423e32496a18bb7134ded1811dfde886edc0",
+    "tests/host.cjs": "de7635558a33a34142ff833dcd7a2b4296b553a6def80bad9a63b8d985662fc5",
     "tests/timing.cjs": "389b2f4a6cc520c573497562ec0a686da3bd3dd7749e5d6872258375f2210f06",
-    "tests/ui-dom.cjs": "1fe3f4becee5df6bd3e5541181601bf733ccecc04dfa63e5bfd5d5f82083c247",
-    "tools/browser-check.cjs": "d55d2dcfe8d8b51bc38b4fe2063d19440c3735d1c34b2de5d987a0464ac81068",
-    "tools/build.cjs": "d81d556af6371921113051ff1ebea5d5cd8dee14aeaf297639c6cd90ab6e8f32",
-    "tools/check.cjs": "ddbd871566fcdc6adb975d5e48b11ba50b960f095ea1fcbfadf1618008bc72cc",
+    "tests/ui-dom.cjs": "4c6a9b724d8459f700b5a2886604fcb0250f3a0fbbeba01bfef5f1b56c1e2fd6",
+    "tools/browser-check.cjs": "7b01f77bed080b110d88926192db9dace720c45e7805416958010830dd569a3b",
+    "tools/build.cjs": "32ab195f17c81d8e9ac89ee90599a79b79d7945202a2ddc171d95016a4f638ba",
+    "tools/check.cjs": "c5570ab1f5540f0e37ab7e2d2c7d753dabd520cb0f5fe9d4a2ae316182138967",
+    "tools/command-modules.cjs": "9cd2718ec5119ed800ff6e8fae86a7bc84f3fb2cc4a1fe60cfa7e58787afff4c",
     "tools/es3-check.cjs": "840365e68f7077a8da4b39e778102de6bc4ee6669b86dff2ca8e08199d3e66b9",
-    "tools/package.py": "dedc72a68e16f0d8f157f60a5236eb8c733035cb124858564839f48949f0ca88",
-    "tools/preview.cjs": "3521f02fdbdddab632af558058edba04c1fa13fb4cc6557c50957e207729755d"
+    "tools/package.py": "dc597312dcea60326be97fb8bad8a58b2e719546eac2af65c514dc15147a7d1b",
+    "tools/preview.cjs": "90b0e0734df3d7712fd0cc8e6776c6662d582e5e3899faafd20f1ba832f92941"
   }
 }

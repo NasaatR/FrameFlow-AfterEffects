@@ -1,6 +1,6 @@
 /* FrameFlow CEP host. Data-only RPC; no eval, command IDs, network or file writes. */
 var FFCEP = (function () {
-    var VERSION = "2.4.0", serial = 0, session = String(new Date().getTime()) + "-" + String(Math.random());
+    var VERSION = "2.4.2", serial = 0, session = String(new Date().getTime()) + "-" + String(Math.random());
     var saved = null, recent = [], busy = false, prepared = null, planSerial = 0;
     function fail(message) { throw new Error(message); }
     function own(o, k) { return Object.prototype.hasOwnProperty.call(o, k); }
@@ -230,40 +230,18 @@ var FFCEP = (function () {
         }
         return result;
     }
-    function corePlan(c, r) {
-        var request, plan;
-        if (r.op === "arrange") {
-            schema(r,"|op||token||action||scope||order||anchor||frames||preview|");
-            if (r.preview !== true) fail("Arrange requires a preview before applying.");
-            return FFHost.prepareArrange(r);
-        }
-        if (r.op === "interval") {
-            schema(r,"|op||token||action||frames||scope||crossing||compMarkers||preview|");
-            if (r.preview !== true) fail("Interval operations require a preview before applying.");
-            if (r.scope !== "auto" && r.scope !== "all" && r.scope !== "selected") fail("Choose Auto, Selected or All layers.");
-            bool(r.compMarkers); return FFHost.prepareInterval(r);
-        }
-        if (r.op === "gap") { schema(r, "|op||token||scope||compMarkers||preview|"); if (r.scope !== "auto" && r.scope !== "all" && r.scope !== "selected") fail("Область не распознана."); bool(r.compMarkers); return FFHost.prepareGap(r); }
-        schema(r, "|op||token||ids||scope||deltaFrames||mode||frames||region||direction||compMarkers||mediaPolicy||preview|");
-        if (r.op === "move") {
-            targets(c, r.ids, false);
-            number(r.deltaFrames, -1000000, 1000000, false); if (r.deltaFrames === 0) fail("Сдвиг равен нулю.");
-            request = {mode:"layers", region:"all", scope:"selected", layerIds:r.ids, direction:r.deltaFrames > 0 ? 1 : -1, deltaSeconds:r.deltaFrames * c.frameDuration, frames:1, strict:true};
-        } else {
-            if (!FFCore.validMode(r.mode)) fail("Режим не распознан."); FFCore.parseFrames(String(r.frames));
-            if (r.region !== "before" && r.region !== "after") fail("Сторона не распознана.");
-            if (r.direction !== 1 && r.direction !== -1) fail("Направление не распознано."); bool(r.compMarkers);
-            if (own(r, "ids")) { targets(c, r.ids, false); request = {scope:"selected",layerIds:r.ids}; }
-            else {
-                if (r.scope !== "auto" && r.scope !== "all" && r.scope !== "selected") fail("Выберите Авто, выделенные слои или всю композицию.");
-                request = {scope:r.scope};
-            }
-            request.mode = r.mode; request.region = r.region; request.direction = r.direction;
-            if (typeof r.mediaPolicy !== "undefined" && r.mediaPolicy !== "skip" && r.mediaPolicy !== "stop") fail("Неизвестное правило предела исходника.");
-            request.mediaPolicy = r.mediaPolicy || "stop";
-            request.frames = r.frames; request.strict = true; request.compMarkers = r.compMarkers;
-        }
-        plan = FFHost.prepare(request); return plan;
+    var planHandlers = {};
+    function registerPlan(name, prepare, allowDirect) {
+        if (!/^[a-z][A-Za-z0-9]{0,39}$/.test(name) || /^(read|seek|select|applyPreview|trim|split)$/.test(name) || own(planHandlers,"p:"+name) || typeof prepare !== "function" || typeof allowDirect !== "boolean") fail("Invalid or duplicate plan command registration.");
+        planHandlers["p:"+name] = {prepare:prepare,allowDirect:allowDirect};
+    }
+    /* @frameflow-plan-commands */
+    function hasPlan(name) { return own(planHandlers,"p:"+name); }
+    function corePlan(c,r) {
+        var command = planHandlers["p:"+r.op];
+        if (!command) fail("Unknown plan command.");
+        if (!command.allowDirect && r.preview !== true) fail("Command requires a preview before applying.");
+        return command.prepare(c,r);
     }
     function planSummary(plan, id) {
         var r = plan.request, c = plan.context, targets = [], seen = {}, positions = {}, layers = 0, keys = 0, properties = 0, outside = 0, i, change, item;
@@ -311,7 +289,7 @@ var FFCEP = (function () {
             schema(r, "|op||token||previewId|"); pending = prepared; prepared = null;
             if (!pending || typeof r.previewId !== "string" || pending.id !== r.previewId || pending.token !== r.token) fail("План устарел. Повторите проверку перед применением.");
             plan = pending.plan; result = FFHost.applyPlan(plan); report = FFHost.report(plan,result,"Применить проверенный план");
-        } else if (r.op === "move" || r.op === "offset" || r.op === "gap" || r.op === "interval" || r.op === "arrange") {
+        } else if (hasPlan(r.op)) {
             if (typeof r.preview !== "undefined") bool(r.preview);
             plan = corePlan(c, r); report = FFHost.report(plan, null, "ПРОВЕРКА");
             if (r.preview) {

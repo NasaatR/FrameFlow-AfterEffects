@@ -1,6 +1,6 @@
 (function(root) {
   'use strict';
-  const VERSION='2.4.0';
+  const VERSION='2.4.2';
   function uri(value) {return encodeURIComponent(value).replace(/[!'()*]/g,c=>'%'+c.charCodeAt(0).toString(16).toUpperCase());}
   function encode(request) {return '$.global.FrameFlowCEP.dispatch("'+uri(JSON.stringify(request))+'")';}
   function problem(message,code,stage,op) {const e=Error(message);e.code=code;e.stage=stage;e.operation=op;return e;}

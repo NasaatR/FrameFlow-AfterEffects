@@ -1,5 +1,20 @@
 # Changelog
 
+## 2.4.2
+
+- Publish the extensible command/module foundation after explicit authorization to continue direct main updates. Preserve the issued prepared 2.4.1 archive.
+- Avoid appearance recalculation during frame/context edits and redundant preference writes. Prepare command indexes once; preserve scope/mode DOM nodes and skip identical text/attribute writes.
+- Respect dismissed/replaced preview dialogs when slow read-only results arrive. Host calls are not cancelled or replayed by this UI behavior.
+- Add regression/browser checks for retained DOM nodes, avoided style writes, coalesced saves and delayed previews. Wait for UI readiness in the DOM harness instead of a fixed startup delay.
+
+## 2.4.1 — prepared preview (issued bytes preserved)
+
+- Move all 11 timing commands into a validated catalogue; generate toolbar/menu surfaces and localized labels through shared UI components. Preserve compact controls, themes, preferences and native timing semantics.
+- Split plan preparation into build-time AE modules with one common registration/preview/apply lifecycle. Validate handler links, duplicate operations, UI ID conflicts and icons; keep strict final ES3, stale-target protection and no-replay RPC.
+- Add project navigation and an extension recipe for future agents. Document composite actions, inspection contracts and generic forms as planned extensions rather than implemented features.
+- Keep frame-independent Plan actions available during invalid frame drafts, skip unavailable menu items in keyboard traversal and reuse one eligibility snapshot per render. Repair the standalone demo title to follow the package version.
+- Add module/catalogue extension regressions and a separate Chromium fixture proving new buttons/groups inherit layout and behavior without panel edits. Native AE acceptance remains separate.
+
 ## 2.4.0
 
 - Add Align In/Out to Cursor, Stagger and Sequence with mandatory captured-plan preview, explicit stack/time order and cursor/first-layer anchors. Sequence accepts a zero-frame gap. Preserve subframes, durations, native animation, selection and composition markers.
