@@ -1,8 +1,8 @@
 {
   "product": "FrameFlow AE",
   "version": "2.4.2",
-  "checkedAt": "2026-10-29T02:45:58.930708+00:00",
-  "sourceRef": "local working tree before publication",
+  "checkedAt": "2026-10-29T02:47:50.209175+00:00",
+  "sourceRef": "2de2fa7e25ac36cf9b19bdc9e975c51f385cb084",
   "target": "After Effects 25.x–26.x / CEP 12 / Windows and macOS",
   "checks": {
     "tests": {
@@ -149,7 +149,139 @@
     "actualAE_CEP": "not_run: no actual AE connection",
     "actualClipboard": "not_run: DOM/API simulations only",
     "actualWindowsMacOSInstallers": "not_run: source and shell syntax only",
-    "realBrowserLayout": "not_run for this build",
+    "realBrowserLayout": {
+      "version": "2.4.2",
+      "sourceRef": "2de2fa7e25ac36cf9b19bdc9e975c51f385cb084",
+      "engine": "Chromium",
+      "host": "simulated AE/CEP fixture; no actual Adobe connection",
+      "checks": [
+        {
+          "name": "English default and reduced controls",
+          "status": "pass"
+        },
+        {
+          "name": "all main commands fit the default 360x290 panel",
+          "status": "pass"
+        },
+        {
+          "name": "no horizontal overflow at 320",
+          "status": "pass"
+        },
+        {
+          "name": "no horizontal overflow at 360",
+          "status": "pass"
+        },
+        {
+          "name": "no horizontal overflow at 650",
+          "status": "pass"
+        },
+        {
+          "name": "20 frame edits retain dropdown nodes and avoid global style/HTML mutations",
+          "status": "pass"
+        },
+        {
+          "name": "preview is read-only and Apply executes the captured plan once",
+          "status": "pass"
+        },
+        {
+          "name": "changed AE cursor rejects the captured plan without writing",
+          "status": "pass"
+        },
+        {
+          "name": "Time menu opens an explicit interval policy before read-only preview",
+          "status": "pass"
+        },
+        {
+          "name": "a dismissed slow preview never replaces a newer dialog or writes a scene",
+          "status": "pass"
+        },
+        {
+          "name": "Arrange policies preview without writing and show per-layer shifts",
+          "status": "pass"
+        },
+        {
+          "name": "Sequence zero gap validates its draft and applies in explicit reverse order",
+          "status": "pass"
+        },
+        {
+          "name": "language changes settings and main immediately and survives reopen",
+          "status": "pass"
+        },
+        {
+          "name": "large Russian text and settings fit 320x280 without horizontal overflow",
+          "status": "pass"
+        },
+        {
+          "name": "Russian Arrange dialog with large text fits 320x280 and keeps keyboard focus",
+          "status": "pass"
+        },
+        {
+          "name": "long mode labels and maximum frame step do not overflow",
+          "status": "pass"
+        },
+        {
+          "name": "mode menu stays inside 320x280 and Escape restores focus",
+          "status": "pass"
+        },
+        {
+          "name": "theme text contrast meets 4.5 to 1",
+          "status": "pass"
+        },
+        {
+          "name": "invalid frame drafts leave only independent Plan commands enabled",
+          "status": "pass"
+        },
+        {
+          "name": "a catalogue-only toolbar command inherits theme and captured-plan application",
+          "status": "pass"
+        },
+        {
+          "name": "a catalogue-only menu group localizes and stays usable at narrow widths",
+          "status": "pass"
+        },
+        {
+          "name": "no unhandled browser errors",
+          "status": "pass"
+        }
+      ],
+      "screenshots": [
+        "main-dark.png",
+        "plan-dark.png",
+        "arrange-policy.png",
+        "arrange-plan.png",
+        "settings-light.png",
+        "main-russian.png",
+        "arrange-russian.png",
+        "custom-commands-russian.png"
+      ],
+      "sourceHashes": {
+        "extension/index.html": "c14e301a625ee6ce83cb19551d6de7b439504ea233d1c592af7864a3b8f61fee",
+        "extension/css/panel.css": "886c26fff1303f57de8cbf5f12cebfedef0332a4204cae910f50dacec1048007",
+        "extension/js/bridge.js": "5ea7c7081c5956effe683c676a454e24cb8b91fbfe619d35c8a7db7384d2025b",
+        "extension/js/commands.js": "891e384611a1c1fe68d807622955db17183d3c9454be8e64c6f0a0c79441f903",
+        "extension/js/demo.js": "b8ec484318034e46c4e4da1f45ccea1296b324d2aed7d5585a04ee853d301bfe",
+        "extension/js/i18n.js": "a70071a8f82bbb585c05d001425886e40a8cb0525a495cd3006e059d47a5ecf5",
+        "extension/js/model.js": "b27d2a0b08909a0dbc6a1ff01fa6902b47a0a16f57ae99864ce39eaf2420c171",
+        "extension/js/panel.js": "16f9dff16057a64a4276afde20d0d54f819dd0e627a6e3e7dc936812a79f87f6",
+        "extension/js/ui.js": "cfcd848f939b5bcd8a3a341ce06d022e81a523ced94a0316e3a8f80b494c4789",
+        "extension/jsx/host.jsx": "923f4d42cb5f824aeb626a6efe0f52335eaf38bfc1a0415de2b3214ccf7f29b1",
+        "src/core.jsxinc": "585892145758026f0eb04b6aa398ccb111b18023e3352f05d4e7ae0036846b8c",
+        "src/panel-host.jsxinc": "677d9a82fc7425d1532aeffe6961bbee41aa026801dbeececdfe7bbb97f3a883",
+        "src/commands/arrange.jsxinc": "fc42a7dd1bb05286bd31530845a205f9d324459f75c6ed1e20e450c562c9640f",
+        "src/commands/gap.jsxinc": "ebcb4686d943cb6fd32dac9751cea2d2e3556be618ca8de81352a09439c722e5",
+        "src/commands/interval.jsxinc": "a5537a1a6e56c7176ac5897e37f7fa4bb30d55ca2a529d691d4d8d62a172bd75",
+        "src/commands/move.jsxinc": "fdad0a6b8bb825ab7ef25d2aa8d5b3fd29bd32520342cb7bc118824a6cef63a9",
+        "src/commands/offset.jsxinc": "6e1063030373ea674c311f703d788c604b158b488845ff978331f306f0305dce",
+        "tools/command-modules.cjs": "9cd2718ec5119ed800ff6e8fae86a7bc84f3fb2cc4a1fe60cfa7e58787afff4c",
+        "tools/build.cjs": "32ab195f17c81d8e9ac89ee90599a79b79d7945202a2ddc171d95016a4f638ba",
+        "tests/host-fixture.cjs": "94cadab07de196398e5867dbb3b9423e32496a18bb7134ded1811dfde886edc0",
+        "tools/browser-check.cjs": "7b01f77bed080b110d88926192db9dace720c45e7805416958010830dd569a3b"
+      },
+      "browserVersion": "151.0.7922.34",
+      "status": "pass",
+      "passed": 22,
+      "failed": 0
+    },
     "review": "self-review only"
   },
   "sourceFiles": {
@@ -165,7 +297,7 @@
     "docs/EXTENDING.md": "9ef389b4d799ea9a84b61d7bd52d03fae347104eb6f200d53c897c69d58f258b",
     "docs/SOURCES.md": "4ada45c84e3ae959dce764ce420b1a18ccaa502215c963eb0e74b947315c14fc",
     "docs/STATUS.md": "e1eb15eda902e2d46e878acf9edced014c17cff0de50f422aef3a9faecaca81d",
-    "docs/verification.log": "576f1386f73dbdd32838e6a55c840f2a9903c656425a83a29451c185625356a6",
+    "docs/verification.log": "f47fdc141098a6038ae1b37b183b68d3c6ee503743c784cc5cc85c8051d41e0d",
     "extension/CSXS/manifest.xml": "0c3f888bd48f47818d850c871508ea50e5eff11bc3219ae161d9003800b44228",
     "extension/css/panel.css": "886c26fff1303f57de8cbf5f12cebfedef0332a4204cae910f50dacec1048007",
     "extension/index.html": "c14e301a625ee6ce83cb19551d6de7b439504ea233d1c592af7864a3b8f61fee",
