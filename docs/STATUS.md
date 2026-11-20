@@ -1,4 +1,10 @@
-# FrameFlow 2.4.2 status
+# FrameFlow status
+
+## 2.4.3
+
+Baseline: 93e2c166017018464f1520bcfb90614e9163af82. The 2.4.2 manifest excluded After Effects 2027 (27.0). The CEP host range now admits 25.x through 27.x with the same bundle, extension ID and menu. Windows installation displays manifest metadata, verifies critical installed files and records the actual installed version for rollback. The package validates manifest coverage. Run the cold-launch check in AE 27.0 to confirm menu visibility and the host handshake.
+
+## 2.4.2
 
 Baseline main: 36dc13bf04f2b666add606179a376bf242d3ef46, NasaatR/FrameFlow-AfterEffects. User requested an updated plan and a practical extensible foundation for future buttons/functions with consistent design. Direct expected-head fast-forward updates to main and versioned checked packages remain authorized. Work uses a separate copy of the checked 2.4.0 package; prior workspace edits and issued archives are preserved.
 

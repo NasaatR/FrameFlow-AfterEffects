@@ -7,10 +7,13 @@ $destination = Join-Path $env:APPDATA 'Adobe\CEP\extensions\com.frameflow.ae'
 $regPath = 'HKCU:\Software\Adobe\CSXS.12'
 if (Test-Path $destination) {
     [xml]$manifest = Get-Content -LiteralPath (Join-Path $destination 'CSXS\manifest.xml') -Raw
-    if ($manifest.ExtensionManifest.ExtensionBundleVersion -ne '2.3.0') { throw 'Installed FrameFlow changed. Automatic restore stopped to preserve it.' }
+    if ($manifest.ExtensionManifest.ExtensionBundleVersion -ne $state.version) { throw 'Installed FrameFlow changed. Automatic restore stopped to preserve it.' }
+}
+if ($state.hadExtension -and !(Test-Path -LiteralPath (Join-Path $last.FullName 'extension') -PathType Container)) {
+    throw 'The previous extension is missing from the backup. Restore stopped.'
 }
 Write-Host 'Restoring the latest FrameFlow backup. Close After Effects first.'
-if (Test-Path $destination) { Move-Item -LiteralPath $destination -Destination (Join-Path $last.FullName ('removed-2.3.0-' + (Get-Date -Format 'HHmmss-fff'))) }
+if (Test-Path $destination) { Move-Item -LiteralPath $destination -Destination (Join-Path $last.FullName ('removed-' + $state.version + '-' + (Get-Date -Format 'HHmmss-fff'))) }
 if ($state.hadExtension) { Move-Item -LiteralPath (Join-Path $last.FullName 'extension') -Destination $destination }
 $current = Get-ItemProperty -Path $regPath -Name PlayerDebugMode -ErrorAction SilentlyContinue
 if ($null -ne $current -and $current.PlayerDebugMode -eq '1') {

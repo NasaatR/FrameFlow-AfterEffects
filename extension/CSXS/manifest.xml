@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<ExtensionManifest Version="7.0" ExtensionBundleId="com.frameflow.ae" ExtensionBundleVersion="2.4.2" ExtensionBundleName="FrameFlow">
-  <ExtensionList><Extension Id="com.frameflow.ae.panel" Version="2.4.2"/></ExtensionList>
+<ExtensionManifest Version="7.0" ExtensionBundleId="com.frameflow.ae" ExtensionBundleVersion="2.4.3" ExtensionBundleName="FrameFlow">
+  <ExtensionList><Extension Id="com.frameflow.ae.panel" Version="2.4.3"/></ExtensionList>
   <ExecutionEnvironment>
-    <HostList><Host Name="AEFT" Version="[25.0,26.9]"/></HostList>
+    <HostList><Host Name="AEFT" Version="[25.0,27.99.99]"/></HostList>
     <LocaleList><Locale Code="All"/></LocaleList>
     <RequiredRuntimeList><RequiredRuntime Name="CSXS" Version="12.0"/></RequiredRuntimeList>
   </ExecutionEnvironment>

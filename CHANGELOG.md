@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.4.3
+
+- Admit After Effects 2027 (27.x) in the CEP manifest. Keep the existing extension IDs, menu entry, settings and timing commands.
+- Read the actual package version, host range and menu label in the Windows installer, verify critical installed files and use the recorded installation version for rollback.
+- Align installation instructions and validate AE 25–27 coverage in the packager. Actual AE 27.0 loading remains a host smoke test.
+
 ## 2.4.2
 
 - Publish the extensible command/module foundation after explicit authorization to continue direct main updates. Preserve the issued prepared 2.4.1 archive.

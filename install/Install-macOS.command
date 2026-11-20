@@ -10,7 +10,7 @@ staging="$frameflow_root/staging-$$"
 domain="com.adobe.CSXS.12"
 test -f "$package_root/extension/CSXS/manifest.xml"
 mkdir -p "$extensions_root" "$backup"
-printf '%s\n' 'FrameFlow 2.3.0 / AE 25-26 / CEP 12' 'Close the FrameFlow panel before installation; AE may stay open.' 'Installs for this account and enables unsigned CEP 12 panels.'
+printf '%s\n' 'FrameFlow 2.4.3 / AE 25-27 / CEP 12' 'Restart After Effects after installation so it rescans extensions.' 'Installs for this account and enables unsigned CEP 12 panels.'
 if defaults read "$domain" PlayerDebugMode > "$backup/debug-value.txt" 2>/dev/null; then printf 'present\n' > "$backup/debug-state.txt"; else printf 'absent\n' > "$backup/debug-state.txt"; fi
 if defaults read-type "$domain" PlayerDebugMode > "$backup/debug-type.txt" 2>/dev/null; then :; fi
 if test -d "$destination"; then printf 'present\n' > "$backup/extension-state.txt"; else printf 'absent\n' > "$backup/extension-state.txt"; fi
@@ -41,6 +41,6 @@ placed_new=1
 defaults write "$domain" PlayerDebugMode -string 1
 test "$(defaults read "$domain" PlayerDebugMode)" = 1
 trap - ERR
-printf '%s\n' "Installed: $destination" "Backup: $backup" 'Reopen Window > Extensions (Legacy) > FrameFlow 2.3. Restart AE if the new version is not loaded.'
+printf '%s\n' "Installed: $destination" "Backup: $backup" 'After restarting AE, open Window > Extensions (Legacy) > FrameFlow 2.4.'
 printf '%s\n' 'To restore, follow install/RESTORE_MACOS_RU.md.'
 read -r -p 'Press Enter to close.' _frameflow_answer

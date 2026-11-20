@@ -58,6 +58,17 @@ def main():
     run('bash', '-n', 'install/Install-macOS.command')
     manifest = ET.parse(ROOT / 'extension/CSXS/manifest.xml').getroot()
     assert manifest.attrib['ExtensionBundleVersion'] == version
+    assert manifest.attrib['ExtensionBundleId'] == 'com.frameflow.ae'
+    extension_id = 'com.frameflow.ae.panel'
+    assert manifest.find('ExtensionList/Extension').attrib == {'Id': extension_id, 'Version': version}
+    assert manifest.find('DispatchInfoList/Extension').attrib['Id'] == extension_id
+    host = manifest.find('./ExecutionEnvironment/HostList/Host[@Name="AEFT"]')
+    version_range = re.fullmatch(r'\[(\d+\.\d+(?:\.\d+)?),(\d+\.\d+(?:\.\d+)?)\]', host.attrib['Version'])
+    assert version_range, 'AEFT must declare an inclusive CEP version range'
+    lower, upper = [tuple(map(int, (endpoint + '.0').split('.')[:3])) for endpoint in version_range.groups()]
+    assert lower == (25, 0, 0) and (27, 99, 99) <= upper < (28, 0, 0), 'Expected AEFT 25.x through 27.x'
+    assert manifest.find('.//UI/Menu').text == 'FrameFlow 2.4'
+    assert manifest.find('.//RequiredRuntime[@Name="CSXS"]').attrib['Version'] == '12.0'
     assert manifest.find('.//ScriptPath') is None
     assert (ROOT / 'extension' / manifest.find('.//MainPath').text).is_file()
     html = (ROOT / 'extension/index.html').read_text(encoding='utf-8')
@@ -79,7 +90,7 @@ def main():
         'product': 'FrameFlow AE', 'version': version,
         'checkedAt': datetime.datetime.now(datetime.timezone.utc).isoformat(),
         'sourceRef': os.environ.get('GITHUB_SHA', 'local working tree before publication'),
-        'target': 'After Effects 25.x–26.x / CEP 12 / Windows and macOS',
+        'target': 'After Effects 25.x–27.x / CEP 12 / Windows and macOS',
         'checks': {
             'tests': test_summary,
             'testScope': 'strict ES3; catalogue/module extension contracts; pure timing; simulated AE/CEP/DOM; scoped evalFile; RPC; clipboard and connection recovery',
