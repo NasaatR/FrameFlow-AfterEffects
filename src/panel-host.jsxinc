@@ -1,6 +1,6 @@
 /* FrameFlow CEP host. Data-only RPC; no eval, command IDs, network or file writes. */
 var FFCEP = (function () {
-    var VERSION = "2.4.3", serial = 0, session = String(new Date().getTime()) + "-" + String(Math.random());
+    var VERSION = "2.4.4", serial = 0, session = String(new Date().getTime()) + "-" + String(Math.random());
     var saved = null, recent = [], busy = false, prepared = null, planSerial = 0;
     function fail(message) { throw new Error(message); }
     function own(o, k) { return Object.prototype.hasOwnProperty.call(o, k); }
@@ -90,9 +90,9 @@ var FFCEP = (function () {
         for (i = 0; i < v.length; i++) { number(v[i], 1, 2147483647, true); if (seen["k" + v[i]]) fail("Повтор цели."); seen["k" + v[i]] = true; }
         return v;
     }
-    function getComp() {
-        var c = app.project ? app.project.activeItem : null;
-        if (!(c instanceof CompItem)) fail("Откройте композицию в After Effects.");
+    function getComp(project) {
+        var c = project ? project.activeItem : null;
+        if (!(c instanceof CompItem) || !isValid(c)) fail("Откройте композицию в After Effects.");
         if (c.numLayers > 2000) fail("Более 2000 слоёв: откройте меньшую композицию.");
         return c;
     }
@@ -121,18 +121,41 @@ var FFCEP = (function () {
         return {compId:c.id, name:c.name, duration:c.duration, frameDuration:c.frameDuration, displayStart:c.displayStartTime,
             time:c.time, workStart:c.workAreaStart, workDuration:c.workAreaDuration, layers:layers};
     }
-    function snapshot() {
-        var c = getComp(), state = model(c), signature = stringify(state);
-        if (!saved || saved.project !== app.project || saved.comp !== c || saved.signature !== signature) {
-            saved = {project:app.project, comp:c, signature:signature, token:session + ":" + (++serial)};
+    function sameTarget(root, comp) {
+        // AE can invalidate previously returned native objects between requests.
+        try {
+            return saved && isValid(saved.root) && isValid(saved.comp) && saved.root === root && saved.comp === comp;
+        } catch (invalidReference) { return false; }
+    }
+    function captureContext() {
+        var project, root, comp, state, signature;
+        try {
+            project = app.project;
+            comp = getComp(project);
+            root = project.rootFolder;
+            state = model(comp);
+            signature = stringify(state);
+        } catch (readError) {
+            saved = null;
+            prepared = null;
+            throw readError;
+        }
+        if (!sameTarget(root, comp) || saved.signature !== signature) {
+            saved = {token:session + ":" + (++serial)};
             prepared = null;
         }
+        saved.root = root;
+        saved.comp = comp;
+        saved.signature = signature;
         state.token = saved.token; state.version = VERSION;
         state.environment = {ae:String(app.version), build:String(app.buildNumber), os:String($.os)};
-        return state;
+        return {comp:comp, state:state};
     }
+    function snapshot() { return captureContext().state; }
     function current(token) {
-        var s = snapshot(); if (typeof token !== "string" || token !== s.token) fail("Композиция изменилась. Обновите панель и повторите действие."); return saved.comp;
+        var context = captureContext();
+        if (typeof token !== "string" || token !== context.state.token) fail("Композиция изменилась. Обновите панель и повторите действие.");
+        return context.comp;
     }
     function targets(c, list, allowEmpty) {
         var result = [], i, j; ids(list);
@@ -293,7 +316,9 @@ var FFCEP = (function () {
             if (typeof r.preview !== "undefined") bool(r.preview);
             plan = corePlan(c, r); report = FFHost.report(plan, null, "ПРОВЕРКА");
             if (r.preview) {
-                state = snapshot(); id = session + ":plan:" + (++planSerial);
+                state = snapshot();
+                if (state.token !== r.token) fail("Композиция изменилась. Обновите панель и повторите действие.");
+                id = session + ":plan:" + (++planSerial);
                 prepared = {id:id,token:state.token,created:new Date().getTime(),plan:plan};
                 return {state:state,preview:planSummary(plan,id),report:report,blocked:plan.errors.length > 0,
                     message:"План: " + plan.changes.length + "; пропусков: " + plan.skips.length + (plan.mediaLimits && plan.mediaLimits.length ? " · без запаса: " + plan.mediaLimits.length : "")};

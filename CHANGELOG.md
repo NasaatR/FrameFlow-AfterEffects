@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.4.4
+
+- Recover composition reads when After Effects invalidates cached project or composition references. Resolve the active project once per read and track its root folder.
+- Discard pending previews on a failed read or target change. Check the current composition again before applying edits.
+
 ## 2.4.3
 
 - Admit After Effects 2027 (27.x) in the CEP manifest. Keep the existing extension IDs, menu entry, settings and timing commands.
