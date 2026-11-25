@@ -7,7 +7,7 @@
   let prefs,preferenceStore,saveTimer=null,saveError='',state=null,bridge=null,isDemo=false,disposed=false,pollTimer=null,busy=false,menuOwner=null,dialogFocus=null,lastReport='',history=[],readFailures=0,connectionFailed=false,frameDraft=false,quickDraft=null,activePreview=null,statusRaw='',dialogRevision=0;
   const t=(en,ru)=>prefs.language==='ru'?ru:en,D=text=>FFText.message(text,prefs.language);
   const modeNames=()=>({offset:t('Layers + Keys','Слои и ключи'),layers:t('Whole Layers','Слои целиком'),keys:t('All Keys','Все ключи'),selectedKeys:t('Selected Keys','Выделенные ключи')});
-  const modeNotes=()=>({offset:t('Whole layers on the chosen side; edge and keys for layers crossing the cursor.','Слой целиком на выбранной стороне; край и ключи у пересекающего курсор слоя.'),layers:t('Move the entire layer with all keys. The side is determined by its In point.','Перенос целого слоя со всеми ключами. Сторона определяется по In.'),keys:t('Move keys on the chosen side. Layer bounds stay unchanged.','Перенос ключей выбранной стороны без изменения границ слоя.'),selectedKeys:t('Only selected AE keys on the chosen side.','Только выделенные в AE ключи на выбранной стороне.')});
+  const modeNotes=()=>({offset:t('Between keys, shift only keys on the chosen side. Otherwise shift that side’s layers or crossing edges.','Между ключами сдвигаются только ключи выбранной стороны. В остальных случаях сдвигаются слои или их края.'),layers:t('Move the entire layer with all keys. The side is determined by its In point.','Перенос целого слоя со всеми ключами. Сторона определяется по In.'),keys:t('Move keys on the chosen side. Layer bounds stay unchanged.','Перенос ключей выбранной стороны без изменения границ слоя.'),selectedKeys:t('Only selected AE keys on the chosen side.','Только выделенные в AE ключи на выбранной стороне.')});
   const scopeNames=()=>({auto:t('Auto','Авто'),selected:t('Selected','Выделенные'),all:t('All Layers','Все слои')});
   const arrangeNames=()=>Object.fromEntries(C.inGroup('arrange').filter(c=>c.form==='arrange').map(c=>[c.args.action,C.title(c,prefs.language)]));
   const orderNames=()=>({top:t('Top → Bottom','Сверху вниз'),bottom:t('Bottom → Top','Снизу вверх'),time:t('Start Time','По началу')});
@@ -62,10 +62,15 @@
       const fresh=await bridge.call({op:'read'});if(disposed)return null;accept(fresh.state);readCompleted=true;connectionFailed=false;readFailures=0;
       const result=data.op==='read'?fresh:await bridge.call(Object.assign({},data,{token:state.token}));if(disposed)return null;
       if(result.state)accept(result.state);if(result.report)lastReport=result.report;
-      if(result.failure){lastReport=result.report||JSON.stringify(result.failure,null,2);log(data.op,result.message);status(result.message,true);}
+      if(result.failure){
+        const failure=result.failure, context=failure.failure||{};
+        const message=[result.message,failure.error&&failure.error.message].find(value=>typeof value==='string'&&value.trim()&&!/^(undefined|null)$/i.test(value.trim()))||t('AE rejected the operation.','AE отклонил операцию.');
+        const detail=[message,context.phase,context.target].filter(Boolean).join(' · ');
+        lastReport=result.report||JSON.stringify(failure,null,2);log(data.op,detail);status(detail,true);
+      }
       else if(!quiet){status(result.message||(isDemo?t('Demo · AE disconnected','Демо · AE не подключён'):t('Synced with AE','Синхронизировано с AE')),false,result.warning);log(data.op,result.message||t('confirmed','подтверждено'));}
       if(data.preview&&previewRevision===dialogRevision)showPreview(result);return result;
-    }catch(e){if(disposed)return null;connectionFailed=!!(bridge.needsReconnect||bridge.uncertain);if(!readCompleted){readFailures++;state=null;}$('empty-text').textContent=D(e.message);status(e.message,true);log(data.op,(e.code?e.code+' / '+e.stage+' · ':'')+e.message);lastReport=D(e.message)+(e.code?'\nCode: '+e.code+'\nStage: '+e.stage+'\nRequest: '+data.op:'')+(e.host?'\n'+JSON.stringify(e.host,null,2):'');return null;}
+    }catch(cause){if(disposed)return null;const e=cause&&cause.message?cause:new Error(typeof cause==='string'&&cause!=='undefined'?cause:t('AE returned no error description.','AE не передал описание ошибки.'));connectionFailed=!!(bridge.needsReconnect||bridge.uncertain);if(!readCompleted){readFailures++;state=null;}$('empty-text').textContent=D(e.message);status(e.message,true);log(data.op,(e.code?e.code+' / '+e.stage+' · ':'')+e.message);lastReport=D(e.message)+(e.code?'\nCode: '+e.code+'\nStage: '+e.stage+'\nRequest: '+data.op:'')+(e.host?'\n'+JSON.stringify(e.host,null,2):'');return null;}
     finally{busy=false;render();schedulePoll();}
   }
   function refresh(quiet=false){if(quiet&&connectionFailed)return Promise.resolve(null);return request({op:'read'},quiet);}

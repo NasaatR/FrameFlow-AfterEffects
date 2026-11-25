@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.4.5
+
+- Between keyframes on a crossing layer, Layers + Keys offsets only the requested side’s keys. The layer keeps its timing and stationary keys stay native.
+- Report moved keys and retain the operation phase and target in failure history.
+
 ## 2.4.4
 
 - Recover composition reads when After Effects invalidates cached project or composition references. Resolve the active project once per read and track its root folder.

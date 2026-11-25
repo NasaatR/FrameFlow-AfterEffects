@@ -48,6 +48,8 @@ function mediaScene(region='after'){
   const rows=[[218,318,372],[223,307,352],[265,313,348],[123,223,275],[138,209,257],[170,218,253],[15,115,189],[-9,91,169],[0,71,181],[71,71,192]];
   while(f.comp.items.length<10)f.addLayer(0,8);
   f.comp.items.forEach((l,i)=>{const r=rows[i];l.startTime=r[0]/24;l.inPoint=r[1]/24;l.outPoint=r[2]/24;l.source.duration=i===9?121/24:20;l.selected=false;l.keys.splice(0,l.keys.length,{time:5,value:10,selected:true},{time:7,value:20,selected:false});});
+  // This fixture exercises an edge extension outside the limited layer's animation.
+  f.comp.items[9].keys[0].time=6.5;
   if(region==='before'){f.comp.items[0].startTime=0;f.comp.items[0].inPoint=1;f.comp.items[0].outPoint=2;}
   return f;
 }
@@ -122,5 +124,39 @@ test('insert blocks duration markers crossing the insertion point before all wri
 test('remove blocks point markers in cut and duration markers overlapping either edge',()=>{for(const entries of [[[2.25]],[[1,1.25]],[[2.4,1]]]){const f=animationInterval(),m=markerProperty(f,entries);f.comp.markerProperty=m.p;const writes=f.writes(),r=interval(f,{action:'remove',compMarkers:true,crossing:'retime'});assert.equal(r.data.preview.blocked,true);assert.equal(f.writes(),writes);assert.equal(f.groups(),0);}});
 test('new composition markers after interval preview invalidate the plan without a write',()=>{const f=animationInterval(),m=markerProperty(f,[]);f.comp.markerProperty=m.p;const writes=f.writes(),r=interval(f,{compMarkers:true});assert.equal(r.data.preview.blocked,false);m.keys.push({time:3,selected:false,value:{comment:'new',duration:0,getParameters(){return {};}}});const a=f.call({op:'applyPreview',token:r.data.state.token,previewId:r.data.preview.id});assert.equal(a.ok,true);assert.ok(a.data.failure);assert.equal(f.writes(),writes);});
 test('interval later-layer movement retains native audio, parent and matte relationships',()=>{const f=animationInterval(),l=f.comp.items[1],parent=f.comp.items[0];l.hasAudio=true;l.parent=parent;l.hasTrackMatte=true;l.trackMatteLayer=parent;const original=l.keys.map(k=>k.time),r=interval(f);const a=f.call({op:'applyPreview',token:r.data.state.token,previewId:r.data.preview.id});assert.equal(a.ok,true);assert.equal(a.data.failure,undefined);assert.equal(l.inPoint,7.5);assert.equal(l.parent,parent);assert.equal(l.trackMatteLayer,parent);assert.deepEqual(l.keys.map(k=>k.time),original.map(t=>t+.5));});
-test('English diagnostics preserve artist-authored names and reject unknown language',()=>{const f=fixture();f.comp.name='Маркеры композиции';f.comp.items[0].name='слой';const r=f.raw(JSON.stringify({id:'english:1',version:'2.4.4',language:'en',data:{op:'read'}}));assert.equal(r.ok,true);assert.equal(r.data.state.name,'Маркеры композиции');assert.equal(r.data.state.layers[0].name,'слой');const bad=f.raw(JSON.stringify({id:'english:2',version:'2.4.4',language:'fr',data:{op:'read'}}));assert.equal(bad.ok,false);assert.equal(f.writes(),0);});
+test('English diagnostics preserve artist-authored names and reject unknown language',()=>{const f=fixture();f.comp.name='Маркеры композиции';f.comp.items[0].name='слой';const r=f.raw(JSON.stringify({id:'english:1',version:'2.4.5',language:'en',data:{op:'read'}}));assert.equal(r.ok,true);assert.equal(r.data.state.name,'Маркеры композиции');assert.equal(r.data.state.layers[0].name,'слой');const bad=f.raw(JSON.stringify({id:'english:2',version:'2.4.5',language:'fr',data:{op:'read'}}));assert.equal(bad.ok,false);assert.equal(f.writes(),0);});
 
+
+for(const region of ['before','after'])for(const preview of [false,true]){
+  test('between keys at frame 141: '+region+' -5, preview='+preview,()=>{
+    const f=fixture(),l=f.comp.items[0];f.comp.time=141/24;l.outPoint=15;
+    l.keys.forEach((k,i)=>{k.time=[120,144,168][i]/24;});
+    const stationary=l.keys[region==='after'?0:2];
+    const initial=f.writes(),r=timing(f,{mode:'offset',ids:[l.id],region,direction:-1,frames:5,preview});
+    if(preview){assert.equal(f.writes(),initial);assert.equal(r.data.preview.targets[0].kind,'property');}
+    const applied=preview?applyPreview(f,r.data.preview):r;
+    assert.equal(applied.data.result.ok,true);
+    assert.deepEqual(l.keys.map(k=>Math.round(k.time*24)),region==='after'?[120,139,163]:[115,144,168]);
+    assert.deepEqual([l.startTime,l.inPoint,l.outPoint],[0,0,15]);
+    assert.ok(l.keys.includes(stationary));assert.equal(f.groups(),1);
+  });
+}
+
+test('After -5 moves a later layer and the later keys of a crossing layer in one undo group',()=>{
+  const f=fixture(),cross=f.comp.items[0],later=f.comp.items[1];
+  f.comp.time=141/24;cross.outPoint=12;later.startTime=7;
+  cross.keys.forEach((k,i)=>{k.time=[5,6,7][i];});
+  const r=timing(f,{scope:'all',mode:'offset',direction:-1,frames:5});
+  assert.equal(r.data.result.ok,true);assert.equal(f.groups(),1);
+  assert.equal(later.startTime,7-5/24);assert.equal(cross.outPoint,12);
+  assert.deepEqual(cross.keys.map(k=>k.time),[5,6-5/24,7-5/24]);
+});
+
+test('between keys, a five-frame collision blocks every layer before writing',()=>{
+  const f=fixture(),l=f.comp.items[0];f.comp.time=141/24;
+  l.keys.forEach((k,i)=>{k.time=[139,144,168][i]/24;});
+  const writes=f.writes(),before=f.comp.items.map(remember);
+  const r=timing(f,{scope:'all',mode:'offset',direction:-1,frames:5});
+  assert.equal(r.data.failure.ok,false);assert.match(r.data.message,/Коллизия/);
+  assert.equal(f.writes(),writes);assert.equal(f.groups(),0);assert.deepEqual(f.comp.items.map(remember),before);
+});

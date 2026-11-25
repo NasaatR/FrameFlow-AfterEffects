@@ -1,5 +1,9 @@
 # FrameFlow status
 
+## 2.4.5
+
+The user confirmed composition reads in 2.4.4 on AE 27.0x78. Offset now preserves crossing-layer bounds between keys. Regression coverage uses frame 141 at 24 fps and a five-frame shift. Native validation of this new behavior remains pending.
+
 ## 2.4.4
 
 Baseline: 844317f52f2acc2d1d2315134019852444e04f0e. On AE 27.0x78, FrameFlow 2.4.3 loaded successfully but repeated reads failed with `Object is invalid` at the cached native identity comparison. Track the current project's root item and composition, validate cached references before comparison, and clear the pending preview when a read fails or the referenced target changes. Mutations use the composition resolved during the current request. Host simulations cover wrapper replacement, invalid references, and recovery after no active composition. The affected After Effects build still requires a native smoke test.

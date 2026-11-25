@@ -1,6 +1,6 @@
 /* FrameFlow CEP host. Data-only RPC; no eval, command IDs, network or file writes. */
 var FFCEP = (function () {
-    var VERSION = "2.4.4", serial = 0, session = String(new Date().getTime()) + "-" + String(Math.random());
+    var VERSION = "2.4.5", serial = 0, session = String(new Date().getTime()) + "-" + String(Math.random());
     var saved = null, recent = [], busy = false, prepared = null, planSerial = 0;
     function fail(message) { throw new Error(message); }
     function own(o, k) { return Object.prototype.hasOwnProperty.call(o, k); }
@@ -330,7 +330,7 @@ var FFCEP = (function () {
             result = directEdit(c, layers, r); report = stringify(result);
         } else fail("Неизвестная операция.");
         if (!result.ok) return {state:snapshot(), failure:result, report:report, message:(result.error ? result.error.message : plan && plan.errors.length ? plan.errors[0] : "Не удалось завершить проверку записи. Откройте отчёт.") + (plan && plan.errors.length && plan.skips.length ? " " + plan.skips[0] : "")};
-        return {state:snapshot(), result:result, report:report, warning:result.mediaSkipped > 0, message:(result.changed ? "Готово · изменений: " + result.changed : "Сцена не изменена") + (result.mediaSkipped ? " · без запаса: " + result.mediaSkipped : result.changed ? "" : " · подходящих целей нет")};
+        return {state:snapshot(), result:result, report:report, warning:result.mediaSkipped > 0, message:(result.changed ? "Готово · изменений: " + result.changed : "Сцена не изменена") + (plan && plan.request.mode === "offset" && result.changed ? " · ключей сдвинуто: " + result.movedKeys : "") + (result.mediaSkipped ? " · без запаса: " + result.mediaSkipped : result.changed ? "" : " · подходящих целей нет")};
     }
     // Localize diagnostics only. Artist-authored names and native values in state stay intact.
     function localized(output, language) {

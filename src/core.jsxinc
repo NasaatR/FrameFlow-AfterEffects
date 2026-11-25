@@ -234,7 +234,7 @@ var FFCore = (function () {
         parseFavorites:favorites, defaults:defaults, parseSettings:parseSettings, encodeSettings:encodeSettings};
 }());
 
-/* FrameFlow AE 2.4.4. AE adapter; native values never pass through JSON. */
+/* FrameFlow AE 2.4.5. AE adapter; native values never pass through JSON. */
 var FFHost = (function () {
     var LIMITS = {properties:20000, keys:50000, reportLines:300, textCharacters:2000};
     var ROOTS = ["ADBE Transform Group", "ADBE Mask Parade", "ADBE Effect Parade", "ADBE MTrackers",
@@ -379,20 +379,27 @@ var FFHost = (function () {
         if (p.expression !== s.expression.text) throw new Error("Текст Expression изменился вне операции");
         if (p.expressionEnabled !== s.expression.enabled) p.expressionEnabled = s.expression.enabled;
     }
-    function restoreProperty(p, s, times) {
-        var i, k, anchor, remap = p.matchName === "ADBE Time Remapping";
+    function restoreProperty(p, s, times, moveOnly) {
+        var i, k, anchor, remap = p.matchName === "ADBE Time Remapping", preserve = [];
+        // Preflight verified these positions. Leave stationary native keys in place.
+        // Recovery may start from a partially written property and must rebuild it.
+        if (moveOnly) for (i = 0; i < times.length; i++) {
+            preserve[i] = times[i] === s.keys[i].time;
+            if (preserve[i]) remap = false;
+        }
         /* Removing the last Time Remap key can disable its host property. Keep a temporary key throughout writing. */
         if (remap) {
             anchor = remapAnchor(p,times);
             p.setValueAtTime(anchor,s.keys[0].value);
         }
-        for (i = p.numKeys; i >= 1; i--) if (!remap || Math.abs(p.keyTime(i)-anchor) > 0.000001) p.removeKey(i);
-        for (i = 0; i < s.keys.length; i++) p.setValueAtTime(times[i],s.keys[i].value);
+        for (i = p.numKeys; i >= 1; i--) if (!preserve[i-1] && (!remap || Math.abs(p.keyTime(i)-anchor) > 0.000001)) p.removeKey(i);
+        for (i = 0; i < s.keys.length; i++) if (!preserve[i]) p.setValueAtTime(times[i],s.keys[i].value);
         if (remap) {
             for (i = p.numKeys; i >= 1; i--) if (Math.abs(p.keyTime(i)-anchor) <= 0.000001) { p.removeKey(i); break; }
         }
         if (p.numKeys !== s.keys.length) throw new Error("AE объединил ключи при записи");
         for (i = 0; i < s.keys.length; i++) {
+            if (preserve[i]) continue;
             k = s.keys[i];
             if (!s.marker) {
                 p.setInterpolationTypeAtKey(i+1,k.inType,k.outType);
@@ -412,8 +419,8 @@ var FFHost = (function () {
             }
         }
         /* Roving only after all values/tangents/endpoints exist. */
-        if (s.spatial) for (i = 0; i < s.keys.length; i++) if (s.keys[i].roving) p.setRovingAtKey(i+1,true);
-        for (i = 0; i < s.keys.length; i++) p.setSelectedAtKey(i+1,s.keys[i].selected);
+        if (s.spatial) for (i = 0; i < s.keys.length; i++) if (!preserve[i] && s.keys[i].roving) p.setRovingAtKey(i+1,true);
+        for (i = 0; i < s.keys.length; i++) if (!preserve[i]) p.setSelectedAtKey(i+1,s.keys[i].selected);
         restoreExpressionState(p,s);
     }
     function verifyProperty(p, s, times, timeTolerance) {
@@ -491,7 +498,8 @@ var FFHost = (function () {
         return "Layer #" + layer.index + " (id " + layer.id + ") / " + (path.length ? path[path.length-1].match : "слой");
     }
     function errorInfo(e) {
-        var info = {message:String(e && e.message ? e.message : e)};
+        var info = {message:String(e && (e.message || e.description) || e)};
+        if (!info.message || info.message === "undefined" || info.message === "null") info.message = "After Effects returned no error description.";
         try { if (e.line) info.line = e.line; } catch (ignored1) { }
         try { if (e.fileName) info.file = String(e.fileName).replace(/^.*[\\\/]/, ""); } catch (ignored2) { }
         try { if (e.stack) info.stack = String(e.stack).substring(0,2000); } catch (ignored3) { }
@@ -647,11 +655,11 @@ var FFHost = (function () {
             sourceDuration:source ? source.duration : null,still:source && source.mainSource ? source.mainSource.isStill === true : false,
             movingSource:layer.hasAudio === true || !!(source && !(source.mainSource && source.mainSource.isStill === true))};
     }
-    function intervalSignature(layer, props) {
+    function intervalSignature(layer, props, includeSpan) {
         var parts = [], i, total = 0; props = props || scanLayer(layer);
         for (i = 0; i < props.length; i++) if (props[i].numKeys) {
             total += props[i].numKeys; if (total > LIMITS.keys) throw new Error("More than 50000 keys: narrow the scope.");
-            parts.push(pathKey(pathOf(props[i],layer))+":"+props[i].numKeys);
+            parts.push(pathKey(pathOf(props[i],layer))+":"+props[i].numKeys+(includeSpan ? ":"+props[i].keyTime(1)+":"+props[i].keyTime(props[i].numKeys) : ""));
         }
         return parts.join("|");
     }
@@ -714,6 +722,17 @@ var FFHost = (function () {
         }
         for (i = 0; i < plan.changes.length; i++) if (intervalSignature(plan.changes[i].layer) !== plan.changes[i].intervalSignature) throw new Error("Keyed properties changed after preview. Preview again.");
     }
+    function keysSpanCursor(props, time) {
+        var before = false, after = false, i, p;
+        for (i = 0; i < props.length; i++) {
+            p = props[i];
+            if (!p.numKeys || (p.isSeparationLeader && p.dimensionsSeparated)) continue;
+            before = before || p.keyTime(1) < time;
+            after = after || p.keyTime(p.numKeys) >= time;
+            if (before && after) return true;
+        }
+        return false;
+    }
     function prepare(request) {
         var context = readContext(), comp = context.comp, layers = [], i, j, k, layer, props, p, path, s, kp, lp, count = 0;
         var plan = {comp:comp,context:context,request:request,changes:[],skips:[],errors:[],notes:[],layerCount:0,mediaLimits:[],keptCrossing:[]};
@@ -762,7 +781,17 @@ var FFHost = (function () {
         for (i = 0; i < layers.length; i++) {
             layer = layers[i];
             if (request.operation === "closeGap" && layer.inPoint < context.cti) continue;
-            if (request.layerDeltas) {
+            props = null;
+            var keysOnly = false;
+            if (!request.operation && request.mode === "offset" && layer.inPoint < context.cti && layer.outPoint > context.cti) {
+                props = scanLayer(layer);
+                keysOnly = keysSpanCursor(props,context.cti);
+                if (!plan.offsetSpans) plan.offsetSpans = [];
+                plan.offsetSpans.push({layer:layer,signature:intervalSignature(layer,props,true)});
+            }
+            if (keysOnly) {
+                lp = layer.locked ? {skip:"Locked layer"} : {kind:"keys"};
+            } else if (request.layerDeltas) {
                 var layerDelta = request.layerDeltas["k"+layer.id];
                 if (Math.abs(layerDelta) <= context.frameDuration*0.000001) continue;
                 lp = FFCore.wholeLayerPlan({start:layer.startTime,inPoint:layer.inPoint,outPoint:layer.outPoint,locked:layer.locked},context,{region:"all",frames:1,direction:layerDelta > 0 ? 1 : -1,deltaSeconds:layerDelta});
@@ -778,7 +807,7 @@ var FFHost = (function () {
             }
             var entries = [], failed = "", moved = 0;
             try {
-                props = scanLayer(layer);
+                props = props || scanLayer(layer);
                 for (j = 0; j < props.length; j++) {
                     p = props[j]; if (!p.numKeys) continue;
                     path = pathOf(p,layer);
@@ -803,6 +832,14 @@ var FFHost = (function () {
                 }
             } catch (captureError) { failed = errorInfo(captureError).message; }
             if (failed) { plan.skips.push(labelFor(layer,[])+": весь слой пропущен — "+failed); continue; }
+            if (keysOnly) {
+                for (j = 0; j < entries.length; j++) {
+                    var entry = entries[j];
+                    plan.changes.push({kind:"property",layer:layer,path:entry.path,snapshot:entry.snapshot,times:entry.times,
+                        moved:entry.moved,label:labelFor(layer,entry.path)});
+                }
+                continue;
+            }
             plan.changes.push({kind:lp.kind,layer:layer,before:{start:layer.startTime,inPoint:layer.inPoint,outPoint:layer.outPoint},
                 after:{start:lp.start,inPoint:lp.inPoint,outPoint:lp.outPoint},properties:entries,delta:lp.delta,moved:moved,label:labelFor(layer,[]),intervalSignature:interval || request.layerDeltas ? intervalSignature(layer,props) : null});
         }
@@ -954,6 +991,9 @@ var FFHost = (function () {
             if (plan.request.operation === "closeGap") validateGapPlan(plan);
             if (plan.intervalState) validateIntervalPlan(plan);
             if (plan.arrangeState) validateArrangePlan(plan);
+            if (plan.offsetSpans) for (i = 0; i < plan.offsetSpans.length; i++) {
+                if (intervalSignature(plan.offsetSpans[i].layer,null,true) !== plan.offsetSpans[i].signature) throw new Error("Keyed properties changed after preview. Preview again.");
+            }
             if (!plan.changes.length) { result.ok = true; return result; }
             phase = "captureSelection"; layerSelection = captureLayerSelection(plan.comp); phase = "preflight";
             for (i = 0; i < plan.changes.length; i++) {
@@ -962,18 +1002,18 @@ var FFHost = (function () {
                 if (c.kind !== "property") { checkLayer(c,false,tolerance); verifyLayerProperties(c,false,tolerance); }
                 else verifyProperty(target(c,plan.comp),c.snapshot,originalTimes(c.snapshot),tolerance);
             }
-            app.beginUndoGroup(plan.arrangement ? "FrameFlow AE 2.4.4 — "+plan.arrangement.action : plan.request.operation === "closeGap" ? "FrameFlow AE 2.4.4 — Убрать паузу" : "FrameFlow AE 2.4.4 — Time Offset"); opened = true;
+            app.beginUndoGroup(plan.arrangement ? "FrameFlow AE 2.4.5 — "+plan.arrangement.action : plan.request.operation === "closeGap" ? "FrameFlow AE 2.4.5 — Убрать паузу" : "FrameFlow AE 2.4.5 — Time Offset"); opened = true;
             for (i = 0; i < plan.changes.length; i++) {
                 phase = "apply"; c = plan.changes[i]; currentChange = c; touched.push(c); result.attempted++;
                 if (c.kind === "layer") {
                     setBounds(c.layer,c.after,true);
                 } else if (c.kind === "edge") {
                     for (j = 0; j < c.properties.length; j++) {
-                        entry = c.properties[j]; if (entry.moved) restoreProperty(resolve(c.layer,entry.path),entry.snapshot,entry.times);
+                        entry = c.properties[j]; if (entry.moved) restoreProperty(resolve(c.layer,entry.path),entry.snapshot,entry.times,true);
                     }
                     setBounds(c.layer,c.after,false);
                 } else {
-                    p = target(c,plan.comp); restoreProperty(p,c.snapshot,c.times);
+                    p = target(c,plan.comp); restoreProperty(p,c.snapshot,c.times,true);
                     verifyProperty(target(c,plan.comp),c.snapshot,c.times,tolerance);
                 }
                 if (c.kind !== "property") { checkLayer(c,true,tolerance); verifyLayerProperties(c,true,tolerance); result.changedLayers++; }
@@ -1033,7 +1073,7 @@ var FFHost = (function () {
         return result;
     }
     function environment() {
-        var lines = ["FrameFlow AE 2.4.4", "Дата: " + new Date().toString()];
+        var lines = ["FrameFlow AE 2.4.5", "Дата: " + new Date().toString()];
         function read(label,fn) { try { lines.push(label+": "+fn()); } catch (ignored) { lines.push(label+": неизвестно"); } }
         read("AE",function(){return app.version;}); read("Build",function(){return app.buildNumber;});
         read("OS",function(){return $.os;}); read("ExtendScript",function(){return $.version;});
