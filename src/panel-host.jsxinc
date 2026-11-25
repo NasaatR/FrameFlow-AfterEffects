@@ -1,6 +1,6 @@
 /* FrameFlow CEP host. Data-only RPC; no eval, command IDs, network or file writes. */
 var FFCEP = (function () {
-    var VERSION = "2.4.5", serial = 0, session = String(new Date().getTime()) + "-" + String(Math.random());
+    var VERSION = "2.4.6", serial = 0, session = String(new Date().getTime()) + "-" + String(Math.random());
     var saved = null, recent = [], busy = false, prepared = null, planSerial = 0;
     function fail(message) { throw new Error(message); }
     function own(o, k) { return Object.prototype.hasOwnProperty.call(o, k); }
@@ -277,6 +277,10 @@ var FFCEP = (function () {
             if (targets.length >= 100) continue;
             item = {layerId:change.layer ? change.layer.id : null,index:change.layer ? change.layer.index : null,
                 kind:change.kind,label:String(change.label).slice(0,500),keys:change.moved || 0,delta:typeof change.delta === "number" ? change.delta : FFCore.offsetSeconds(c,r)};
+            if (change.kind === "property" && change.path && change.path.length) {
+                var lastStep = change.path[change.path.length-1];
+                if (typeof lastStep.axis === "number") item.axis = lastStep.axis;
+            }
             if (change.kind !== "property") { item.before = change.before; item.after = change.after; }
             if (plan.arrangement) item.position = positions["k"+item.layerId];
             targets.push(item);

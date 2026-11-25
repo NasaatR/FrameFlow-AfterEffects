@@ -234,7 +234,7 @@ var FFCore = (function () {
         parseFavorites:favorites, defaults:defaults, parseSettings:parseSettings, encodeSettings:encodeSettings};
 }());
 
-/* FrameFlow AE 2.4.5. AE adapter; native values never pass through JSON. */
+/* FrameFlow AE 2.4.6. AE adapter; native values never pass through JSON. */
 var FFHost = (function () {
     var LIMITS = {properties:20000, keys:50000, reportLines:300, textCharacters:2000};
     var ROOTS = ["ADBE Transform Group", "ADBE Mask Parade", "ADBE Effect Parade", "ADBE MTrackers",
@@ -342,16 +342,19 @@ var FFHost = (function () {
     function snapshotProperty(p) {
         var s = {type:p.propertyValueType, spatial:p.isSpatial === true, marker:p.propertyValueType === PropertyValueType.MARKER,
             expression:sourceState(p), keys:[], hasLabels:false}, k, v, i, easeCount;
+        s.temporalControls = !s.marker && (typeof p.isInterpolationTypeValid !== "function" || p.isInterpolationTypeValid(KeyframeInterpolationType.BEZIER));
         s.hasLabels = !s.marker && typeof p.keyLabel === "function" && typeof p.setLabelAtKey === "function";
         for (i = 1; i <= p.numKeys; i++) {
             v = p.keyValue(i);
             k = {time:p.keyTime(i), value:copy(v), signature:signature(v,s.type), selected:p.keySelected(i)};
             if (!s.marker) {
                 k.inType = p.keyInInterpolationType(i); k.outType = p.keyOutInterpolationType(i);
-                k.inEase = easeList(p.keyInTemporalEase(i)); k.outEase = easeList(p.keyOutTemporalEase(i));
-                easeCount = s.type === PropertyValueType.TwoD ? 2 : (s.type === PropertyValueType.ThreeD ? 3 : 1);
-                if (k.inEase.length !== easeCount || k.outEase.length !== easeCount) throw new Error("Неожиданная размерность Temporal Ease");
-                k.temporalAuto = p.keyTemporalAutoBezier(i); k.temporalContinuous = p.keyTemporalContinuous(i);
+                if (s.temporalControls) {
+                    k.inEase = easeList(p.keyInTemporalEase(i)); k.outEase = easeList(p.keyOutTemporalEase(i));
+                    easeCount = s.type === PropertyValueType.TwoD ? 2 : (s.type === PropertyValueType.ThreeD ? 3 : 1);
+                    if (k.inEase.length !== easeCount || k.outEase.length !== easeCount) throw new Error("Неожиданная размерность Temporal Ease");
+                    k.temporalAuto = p.keyTemporalAutoBezier(i); k.temporalContinuous = p.keyTemporalContinuous(i);
+                }
                 if (s.hasLabels) k.label = p.keyLabel(i);
                 if (s.spatial) {
                     k.inTangent = copy(p.keyInSpatialTangent(i)); k.outTangent = copy(p.keyOutSpatialTangent(i));
@@ -402,14 +405,18 @@ var FFHost = (function () {
             if (preserve[i]) continue;
             k = s.keys[i];
             if (!s.marker) {
-                p.setInterpolationTypeAtKey(i+1,k.inType,k.outType);
-                p.setTemporalAutoBezierAtKey(i+1,false); p.setTemporalContinuousAtKey(i+1,false);
-                if (k.inType === KeyframeInterpolationType.BEZIER || k.outType === KeyframeInterpolationType.BEZIER) {
-                    p.setTemporalEaseAtKey(i+1,nativeEase(k.inEase),nativeEase(k.outEase));
+                if (s.temporalControls || p.keyInInterpolationType(i+1) !== k.inType || p.keyOutInterpolationType(i+1) !== k.outType) {
+                    p.setInterpolationTypeAtKey(i+1,k.inType,k.outType);
                 }
-                p.setInterpolationTypeAtKey(i+1,k.inType,k.outType);
-                p.setTemporalContinuousAtKey(i+1,k.temporalContinuous);
-                p.setTemporalAutoBezierAtKey(i+1,k.temporalAuto);
+                if (s.temporalControls) {
+                    p.setTemporalAutoBezierAtKey(i+1,false); p.setTemporalContinuousAtKey(i+1,false);
+                    if (k.inType === KeyframeInterpolationType.BEZIER || k.outType === KeyframeInterpolationType.BEZIER) {
+                        p.setTemporalEaseAtKey(i+1,nativeEase(k.inEase),nativeEase(k.outEase));
+                    }
+                    p.setInterpolationTypeAtKey(i+1,k.inType,k.outType);
+                    p.setTemporalContinuousAtKey(i+1,k.temporalContinuous);
+                    p.setTemporalAutoBezierAtKey(i+1,k.temporalAuto);
+                }
                 if (s.spatial) {
                     p.setRovingAtKey(i+1,false); p.setSpatialAutoBezierAtKey(i+1,false); p.setSpatialContinuousAtKey(i+1,false);
                     p.setSpatialTangentsAtKey(i+1,k.inTangent,k.outTangent);
@@ -434,7 +441,7 @@ var FFHost = (function () {
             names = ["selected"];
             if (!s.marker) {
                 if (actual.inType !== k.inType || actual.outType !== k.outType) throw new Error("Interpolation ключа " + (i+1) + " не сохранилась");
-                names = names.concat(["temporalAuto","temporalContinuous"]);
+                if (s.temporalControls) names = names.concat(["temporalAuto","temporalContinuous"]);
                 if (!k.temporalAuto && (k.inType === KeyframeInterpolationType.BEZIER || k.outType === KeyframeInterpolationType.BEZIER)) names = names.concat(["inEase","outEase"]);
                 if (s.hasLabels) names.push("label");
                 if (s.spatial) names = names.concat(["inTangent","outTangent","spatialAuto","spatialContinuous","roving"]);
@@ -447,6 +454,10 @@ var FFHost = (function () {
     function originalTimes(s) { var a = [], i; for (i = 0; i < s.keys.length; i++) a.push(s.keys[i].time); return a; }
     function pathOf(p, layer) {
         var path = [], n = p, steps = 0;
+        if (p.isSeparationFollower) {
+            path.push({axis:p.separationDimension,match:p.matchName});
+            n = p.separationLeader;
+        }
         while (n && n !== layer && steps < 40) {
             path.unshift({index:n.propertyIndex, match:n.matchName}); n = n.propertyGroup(1); steps++;
         }
@@ -454,14 +465,18 @@ var FFHost = (function () {
         return path;
     }
     function pathKey(path) {
-        var a = [], i; for (i = 0; i < path.length; i++) a.push(path[i].index + ":" + path[i].match); return a.join("/");
+        var a = [], i; for (i = 0; i < path.length; i++) a.push((typeof path[i].axis === "number" ? "axis"+path[i].axis : path[i].index) + ":" + path[i].match); return a.join("/");
     }
     function resolve(layer, path) {
         var node = layer, next, i;
         for (i = 0; i < path.length; i++) {
             next = null;
-            try { next = node.property(path[i].index); } catch (ignored) { }
-            if (!next || next.matchName !== path[i].match) next = node.property(path[i].match);
+            if (typeof path[i].axis === "number") {
+                if (node.isSeparationLeader && node.dimensionsSeparated) next = node.getSeparationFollower(path[i].axis);
+            } else {
+                try { next = node.property(path[i].index); } catch (ignored) { }
+                if (!next || next.matchName !== path[i].match) next = node.property(path[i].match);
+            }
             if (!next || next.matchName !== path[i].match) throw new Error("Свойство недоступно: " + path[i].match);
             node = next;
         }
@@ -470,12 +485,19 @@ var FFHost = (function () {
     function scanLayer(layer) {
         var out = [], seen = {}, visited = 0, i, root;
         function walk(node, depth) {
-            var key, j;
+            var key, j, dimensions;
             if (!node) return;
+            if (node.propertyType === PropertyType.PROPERTY && node.isSeparationFollower && !node.separationLeader.dimensionsSeparated) return;
+            key = "p:"+pathKey(pathOf(node,layer));
+            if (seen[key]) return;
+            seen[key] = true;
             visited++; if (visited > LIMITS.properties || depth > 40) throw new Error("Слишком большой набор свойств; сузьте область.");
             if (node.propertyType === PropertyType.PROPERTY) {
-                key = pathKey(pathOf(node,layer));
-                if (!seen["p:"+key]) { seen["p:"+key] = true; out.push(node); }
+                if (node.isSeparationLeader && node.dimensionsSeparated) {
+                    dimensions = node.propertyValueType === PropertyValueType.ThreeD_SPATIAL || node.propertyValueType === PropertyValueType.ThreeD ? 3 : 2;
+                    if (node.matchName === "ADBE Position" && layer.threeDLayer === false) dimensions = 2;
+                    for (j = 0; j < dimensions; j++) walk(node.getSeparationFollower(j),depth+1);
+                } else out.push(node);
                 return;
             }
             for (j = 1; j <= node.numProperties; j++) walk(node.property(j),depth+1);
@@ -1002,7 +1024,7 @@ var FFHost = (function () {
                 if (c.kind !== "property") { checkLayer(c,false,tolerance); verifyLayerProperties(c,false,tolerance); }
                 else verifyProperty(target(c,plan.comp),c.snapshot,originalTimes(c.snapshot),tolerance);
             }
-            app.beginUndoGroup(plan.arrangement ? "FrameFlow AE 2.4.5 — "+plan.arrangement.action : plan.request.operation === "closeGap" ? "FrameFlow AE 2.4.5 — Убрать паузу" : "FrameFlow AE 2.4.5 — Time Offset"); opened = true;
+            app.beginUndoGroup(plan.arrangement ? "FrameFlow AE 2.4.6 — "+plan.arrangement.action : plan.request.operation === "closeGap" ? "FrameFlow AE 2.4.6 — Убрать паузу" : "FrameFlow AE 2.4.6 — Time Offset"); opened = true;
             for (i = 0; i < plan.changes.length; i++) {
                 phase = "apply"; c = plan.changes[i]; currentChange = c; touched.push(c); result.attempted++;
                 if (c.kind === "layer") {
@@ -1073,7 +1095,7 @@ var FFHost = (function () {
         return result;
     }
     function environment() {
-        var lines = ["FrameFlow AE 2.4.5", "Дата: " + new Date().toString()];
+        var lines = ["FrameFlow AE 2.4.6", "Дата: " + new Date().toString()];
         function read(label,fn) { try { lines.push(label+": "+fn()); } catch (ignored) { lines.push(label+": неизвестно"); } }
         read("AE",function(){return app.version;}); read("Build",function(){return app.buildNumber;});
         read("OS",function(){return $.os;}); read("ExtendScript",function(){return $.version;});

@@ -1,5 +1,9 @@
 # FrameFlow status
 
+## 2.4.6
+
+Compared the Time OFFSET 1.4 controls and timing features with FrameFlow. Added separated-axis resolution and capability-based discrete-key handling. New automated cases cover 2D, 3D, overlapping discovery, and key labels. Native AE validation remains pending.
+
 ## 2.4.5
 
 The user confirmed composition reads in 2.4.4 on AE 27.0x78. Offset now preserves crossing-layer bounds between keys. Regression coverage uses frame 141 at 24 fps and a five-frame shift. Native validation of this new behavior remains pending.

@@ -124,7 +124,7 @@ test('insert blocks duration markers crossing the insertion point before all wri
 test('remove blocks point markers in cut and duration markers overlapping either edge',()=>{for(const entries of [[[2.25]],[[1,1.25]],[[2.4,1]]]){const f=animationInterval(),m=markerProperty(f,entries);f.comp.markerProperty=m.p;const writes=f.writes(),r=interval(f,{action:'remove',compMarkers:true,crossing:'retime'});assert.equal(r.data.preview.blocked,true);assert.equal(f.writes(),writes);assert.equal(f.groups(),0);}});
 test('new composition markers after interval preview invalidate the plan without a write',()=>{const f=animationInterval(),m=markerProperty(f,[]);f.comp.markerProperty=m.p;const writes=f.writes(),r=interval(f,{compMarkers:true});assert.equal(r.data.preview.blocked,false);m.keys.push({time:3,selected:false,value:{comment:'new',duration:0,getParameters(){return {};}}});const a=f.call({op:'applyPreview',token:r.data.state.token,previewId:r.data.preview.id});assert.equal(a.ok,true);assert.ok(a.data.failure);assert.equal(f.writes(),writes);});
 test('interval later-layer movement retains native audio, parent and matte relationships',()=>{const f=animationInterval(),l=f.comp.items[1],parent=f.comp.items[0];l.hasAudio=true;l.parent=parent;l.hasTrackMatte=true;l.trackMatteLayer=parent;const original=l.keys.map(k=>k.time),r=interval(f);const a=f.call({op:'applyPreview',token:r.data.state.token,previewId:r.data.preview.id});assert.equal(a.ok,true);assert.equal(a.data.failure,undefined);assert.equal(l.inPoint,7.5);assert.equal(l.parent,parent);assert.equal(l.trackMatteLayer,parent);assert.deepEqual(l.keys.map(k=>k.time),original.map(t=>t+.5));});
-test('English diagnostics preserve artist-authored names and reject unknown language',()=>{const f=fixture();f.comp.name='Маркеры композиции';f.comp.items[0].name='слой';const r=f.raw(JSON.stringify({id:'english:1',version:'2.4.5',language:'en',data:{op:'read'}}));assert.equal(r.ok,true);assert.equal(r.data.state.name,'Маркеры композиции');assert.equal(r.data.state.layers[0].name,'слой');const bad=f.raw(JSON.stringify({id:'english:2',version:'2.4.5',language:'fr',data:{op:'read'}}));assert.equal(bad.ok,false);assert.equal(f.writes(),0);});
+test('English diagnostics preserve artist-authored names and reject unknown language',()=>{const f=fixture();f.comp.name='Маркеры композиции';f.comp.items[0].name='слой';const r=f.raw(JSON.stringify({id:'english:1',version:'2.4.6',language:'en',data:{op:'read'}}));assert.equal(r.ok,true);assert.equal(r.data.state.name,'Маркеры композиции');assert.equal(r.data.state.layers[0].name,'слой');const bad=f.raw(JSON.stringify({id:'english:2',version:'2.4.6',language:'fr',data:{op:'read'}}));assert.equal(bad.ok,false);assert.equal(f.writes(),0);});
 
 
 for(const region of ['before','after'])for(const preview of [false,true]){
@@ -159,4 +159,35 @@ test('between keys, a five-frame collision blocks every layer before writing',()
   const r=timing(f,{scope:'all',mode:'offset',direction:-1,frames:5});
   assert.equal(r.data.failure.ok,false);assert.match(r.data.message,/Коллизия/);
   assert.equal(f.writes(),writes);assert.equal(f.groups(),0);assert.deepEqual(f.comp.items.map(remember),before);
+});
+
+for(const dimensions of [2,3])test('separated Position axes are found once through the leader and shifted only after the cursor: '+dimensions+'D',()=>{
+  const f=fixture(),layer=f.comp.items[0],axes=[layer,f.comp.items[1],f.addLayer(0,8)].slice(0,dimensions);
+  const leader={propertyType:1,propertyIndex:1,propertyGroup:()=>layer,matchName:'ADBE Position',
+    propertyValueType:5,isSeparationLeader:true,dimensionsSeparated:true};
+  const followers=axes.map((owner,axis)=>Object.assign(owner.property(1),{propertyIndex:axis+2,
+    matchName:'ADBE Position_'+axis,isSeparationFollower:true,separationLeader:leader,separationDimension:axis}));
+  let lookups=0;
+  leader.getSeparationFollower=axis=>{lookups++;assert.ok(axis<dimensions);return followers[axis];};
+  layer.threeDLayer=dimensions===3;
+  // X appears in the index and selection, other axes are accessible only via the leader.
+  layer.numProperties=2;layer.property=id=>id===1||id===leader.matchName?leader:id===2?followers[0]:null;
+  f.comp.items=[layer];layer.selectedProperties=[leader,followers[0]];f.comp.time=2.5;
+  const r=timing(f,{mode:'offset',frames:5,direction:-1,preview:true});
+  assert.equal(r.data.preview.counts.keys,dimensions);assert.equal(r.data.preview.counts.properties,dimensions);
+  assert.deepEqual(r.data.preview.targets.map(t=>t.axis),Array.from({length:dimensions},(_,i)=>i));
+  const applied=applyPreview(f,r.data.preview);assert.equal(applied.data.result.ok,true);
+  for(const owner of axes)assert.deepEqual(owner.keys.map(k=>k.time),[1,2,3-5/24]);
+  assert.ok(lookups>0);assert.equal(f.groups(),1);
+});
+test('properties without Bezier support move with Hold interpolation and retain key labels',()=>{
+  const f=fixture(),l=f.comp.items[0],p=l.property(1);f.comp.time=2.5;l.selected=true;f.comp.items[1].selected=false;
+  p.isInterpolationTypeValid=type=>type!==f.ctx.KeyframeInterpolationType.BEZIER;
+  p.keyInInterpolationType=p.keyOutInterpolationType=()=>3;
+  p.setInterpolationTypeAtKey=()=>{throw Error('Hold is already the native interpolation');};
+  for(const name of ['keyInTemporalEase','keyOutTemporalEase','keyTemporalContinuous','keyTemporalAutoBezier','setTemporalContinuousAtKey','setTemporalAutoBezierAtKey','setTemporalEaseAtKey'])
+    p[name]=()=>{throw Error('Unsupported Bezier access: '+name);};
+  l.keys[2].label=7;p.keyLabel=i=>l.keys[i-1].label||0;p.setLabelAtKey=(i,label)=>{l.keys[i-1].label=label;};
+  const r=timing(f,{scope:'selected',mode:'offset',frames:5,direction:-1});
+  assert.equal(r.data.result.ok,true);assert.deepEqual(l.keys.map(k=>k.time),[1,2,3-5/24]);assert.equal(l.keys[2].label,7);
 });

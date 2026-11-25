@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.4.6
+
+- Resolve separated Position axes through their leader, show the affected axis in previews, and traverse overlapping property groups once per scan.
+- Preserve discrete keyframes without calling unsupported temporal Bezier controls. Shift button tooltips spell out the direction of movement.
+
 ## 2.4.5
 
 - Between keyframes on a crossing layer, Layers + Keys offsets only the requested side’s keys. The layer keeps its timing and stationary keys stay native.
