@@ -1,5 +1,9 @@
 # FrameFlow status
 
+## 2.4.11
+
+AE 27.0x78 kept an unremapped 20 s precomp instance’s Out at 20 s when the plan requested 20 s + 5 frames at 24 fps. Finite precomp handles now use the same skip or stop policy as finite footage. Covered by a clamp-simulating test and both policy branches. Native validation on the reported composition is pending.
+
 ## 2.4.10
 
 AE 27.0x78 reported a 3.255 µs time difference after a five-frame offset at 24 fps, causing a false apply failure and false rollback errors. Post-write time checks now allow up to 50 µs, capped at 1/1024 of the target composition frame, on changed fields. Preflight still compares captured times strictly. Tests reproduce the reported fractional layer and marker shift, successful rollback under quantization, and a real frame-scale mismatch. Confirm on the original AE project.

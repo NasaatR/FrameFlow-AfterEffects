@@ -124,7 +124,7 @@ test('insert blocks duration markers crossing the insertion point before all wri
 test('remove blocks point markers in cut and duration markers overlapping either edge',()=>{for(const entries of [[[2.25]],[[1,1.25]],[[2.4,1]]]){const f=animationInterval(),m=markerProperty(f,entries);f.comp.markerProperty=m.p;const writes=f.writes(),r=interval(f,{action:'remove',compMarkers:true,crossing:'retime'});assert.equal(r.data.preview.blocked,true);assert.equal(f.writes(),writes);assert.equal(f.groups(),0);}});
 test('new composition markers after interval preview invalidate the plan without a write',()=>{const f=animationInterval(),m=markerProperty(f,[]);f.comp.markerProperty=m.p;const writes=f.writes(),r=interval(f,{compMarkers:true});assert.equal(r.data.preview.blocked,false);m.keys.push({time:3,selected:false,value:{comment:'new',duration:0,getParameters(){return {};}}});const a=f.call({op:'applyPreview',token:r.data.state.token,previewId:r.data.preview.id});assert.equal(a.ok,true);assert.ok(a.data.failure);assert.equal(f.writes(),writes);});
 test('interval later-layer movement retains native audio, parent and matte relationships',()=>{const f=animationInterval(),l=f.comp.items[1],parent=f.comp.items[0];l.hasAudio=true;l.parent=parent;l.hasTrackMatte=true;l.trackMatteLayer=parent;const original=l.keys.map(k=>k.time),r=interval(f);const a=f.call({op:'applyPreview',token:r.data.state.token,previewId:r.data.preview.id});assert.equal(a.ok,true);assert.equal(a.data.failure,undefined);assert.equal(l.inPoint,7.5);assert.equal(l.parent,parent);assert.equal(l.trackMatteLayer,parent);assert.deepEqual(l.keys.map(k=>k.time),original.map(t=>t+.5));});
-test('English diagnostics preserve artist-authored names and reject unknown language',()=>{const f=fixture();f.comp.name='Маркеры композиции';f.comp.items[0].name='слой';const r=f.raw(JSON.stringify({id:'english:1',version:'2.4.10',language:'en',data:{op:'read'}}));assert.equal(r.ok,true);assert.equal(r.data.state.name,'Маркеры композиции');assert.equal(r.data.state.layers[0].name,'слой');const bad=f.raw(JSON.stringify({id:'english:2',version:'2.4.10',language:'fr',data:{op:'read'}}));assert.equal(bad.ok,false);assert.equal(f.writes(),0);});
+test('English diagnostics preserve artist-authored names and reject unknown language',()=>{const f=fixture();f.comp.name='Маркеры композиции';f.comp.items[0].name='слой';const r=f.raw(JSON.stringify({id:'english:1',version:'2.4.11',language:'en',data:{op:'read'}}));assert.equal(r.ok,true);assert.equal(r.data.state.name,'Маркеры композиции');assert.equal(r.data.state.layers[0].name,'слой');const bad=f.raw(JSON.stringify({id:'english:2',version:'2.4.11',language:'fr',data:{op:'read'}}));assert.equal(bad.ok,false);assert.equal(f.writes(),0);});
 
 
 for(const region of ['before','after'])for(const preview of [false,true]){
@@ -317,4 +317,76 @@ test('subframe write tolerance applies to moved keys and leaves preview prefligh
   assert.deepEqual(layer.keys.map(k=>k.time),[1,2,quantize(3.001-5/24)]);
   assert.equal(layer.keys[0],first);
   assert.equal(layer.keys[1],middle);
+});
+
+function exhaustedPrecompScene() {
+  const f=fixture({clampPrecompEdges:true}), edge=f.comp.layer(1), later=f.comp.layer(2);
+  f.comp.duration=20;f.comp.time=179/24;
+  edge.outPoint=20;later.startTime=14;
+  const source=new f.ctx.CompItem();
+  Object.assign(source,{id:771,name:'Source comp',duration:20,frameDuration:1/24});
+  edge.source=source;
+  edge.keys.forEach((key,index)=>{key.time=10+index;});
+  const request={mode:'offset',scope:'auto',frames:5,region:'after',direction:1,mediaPolicy:'skip'};
+  return {f,edge,later,source,request};
+}
+
+test('After +5 keeps the 20-second exhausted precomp and its keys in place, and moves the other layer',()=>{
+  const {f,edge,later,request}=exhaustedPrecompScene(), before=remember(edge), writes=f.writes(), laterStart=later.startTime;
+  const preview=timing(f,{...request,preview:true}).data.preview;
+  assert.equal(preview.counts.mediaSkipped,1);
+  assert.match(preview.skips[0],/исходного прекомпа.*20\.208.*20 s/);
+  assert.deepEqual(preview.targets.map(t=>t.layerId),[later.id]);
+  assert.equal(f.writes(),writes);
+  const applied=applyPreview(f,preview).data;
+  assert.equal(applied.result?.ok,true,applied.report);
+  assert.equal(applied.result.mediaSkipped,1);
+  assert.equal(applied.result.changed,1);
+  assert.equal(applied.warning,true);
+  assert.equal(remember(edge),before);
+  assert.equal(later.startTime,laterStart+5/24);
+  assert.equal(f.groups(),1);
+  assert.equal(f.undo(),0);
+});
+
+test('an exhausted precomp blocks before any write under Cancel All',()=>{
+  const {f,request}=exhaustedPrecompScene(), writes=f.writes();
+  const response=timing(f,{...request,mediaPolicy:'stop'}).data;
+  assert.equal(response.failure.ok,false);
+  assert.match(response.message,/исходного прекомпа/);
+  assert.equal(response.failure.attempted,0);
+  assert.equal(f.writes(),writes);
+  assert.equal(f.groups(),0);
+});
+
+test('precomp handles use the stretched instance and its start, independent of display start and parent duration',()=>{
+  const {f,edge,source,request}=exhaustedPrecompScene();
+  f.comp.duration=12;edge.startTime=2;edge.stretch=150;source.duration=8;source.displayStartTime=3600;
+  edge.outPoint=14-5/24;
+  const result=timing(f,{...request,ids:[edge.id]}).data;
+  assert.equal(result.result?.ok,true,result.report);
+  assert.equal(result.result.mediaSkipped,0);
+  assert.equal(edge.outPoint,14);
+  assert.equal(f.comp.duration,12);
+  assert.equal(source.duration,8);
+});
+
+test('Before -5 checks the head of a precomp, while shortening and whole-layer translation still work',()=>{
+  const {f,edge,source,request}=exhaustedPrecompScene();
+  edge.startTime=1.25;edge.inPoint=1.25;edge.outPoint=11.25;edge.stretch=50;
+  edge.keys.forEach((key,index)=>{key.time=3+index;});
+  const before={...request,ids:[edge.id],region:'before',direction:-1};
+  const result=timing(f,before).data;
+  assert.equal(result.result?.ok,true,result.report);
+  assert.equal(result.result.mediaSkipped,1);
+  assert.match(result.report,/In запрошен/);
+  assert.equal(edge.inPoint,1.25);
+  assert.equal(timing(f,{...before,direction:1}).data.result.ok,true);
+  assert.equal(edge.inPoint,1.25+5/24);
+  f.comp.time=0;
+  const move=timing(f,{...request,ids:[edge.id]}).data;
+  assert.equal(move.result?.ok,true,move.report);
+  assert.equal(move.result.mediaSkipped,0);
+  assert.equal(edge.outPoint,11.25+5/24);
+  assert.equal(source.duration,20);
 });

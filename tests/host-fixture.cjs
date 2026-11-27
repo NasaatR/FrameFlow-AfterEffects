@@ -15,7 +15,7 @@ function fixture(options={}){
     const l={id:++nextId,name:'Layer '+nextId,locked:false,selected:true,enabled:true,label:8,stretch:100,matchName:'ADBE AV Layer',parent:null,hasTrackMatte:false,isTrackMatte:false,timeRemapEnabled:false,
       hasAudio:false,hasVideo:true,source:{id:400,duration:12,mainSource:{isStill:false}},numProperties:1,selectedProperties:[],keys};
     Object.defineProperties(l,{index:{get:()=>comp.items.indexOf(l)+1},startTime:{get:()=>st,set:v=>{writes++;v=nativeTime(v);const d=v-st;st=v;ip+=d;op+=d;keys.forEach(k=>k.time+=d);if(failOffset&&l.id===102&&v!==0&&!failed){failed=true;throw Error("Injected offset failure");}}},
-      inPoint:{get:()=>ip,set:v=>{writes++;ip=nativeTime(v);}},outPoint:{get:()=>op,set:v=>{writes++;op=nativeTime(v);if(options.failSecondTrim&&l.id===102&&v===4&&!failed){failed=true;throw Error('Injected trim failure');}}}});
+      inPoint:{get:()=>ip,set:v=>{writes++;ip=nativeTime(v);}},outPoint:{get:()=>op,set:v=>{writes++;if(options.clampPrecompEdges&&l.source instanceof CompItem&&!l.timeRemapEnabled&&l.stretch>0&&v>op)v=Math.min(v,st+l.source.duration*l.stretch/100);op=nativeTime(v);if(options.failSecondTrim&&l.id===102&&v===4&&!failed){failed=true;throw Error('Injected trim failure');}}}});
     const p={propertyValueType:1,propertyType:1,isSpatial:false,canSetExpression:false,matchName:'ADBE Opacity',propertyIndex:1,name:'Opacity',propertyGroup:()=>l,
       keyTime:i=>keys[i-1].time,keyValue:i=>keys[i-1].value,keySelected:i=>keys[i-1].selected,
       keyInInterpolationType:()=>1,keyOutInterpolationType:()=>1,keyInTemporalEase:()=>[{speed:0,influence:33.333}],keyOutTemporalEase:()=>[{speed:0,influence:33.333}],keyTemporalAutoBezier:()=>false,keyTemporalContinuous:()=>false,
@@ -34,7 +34,7 @@ function fixture(options={}){
   vm.createContext(ctx);if(!options.unloaded)vm.runInContext(hostSource,ctx);
   let count=0;
   function raw(text){return JSON.parse(ctx.$.global.FrameFlowCEP.dispatch(encodeURIComponent(text)));}
-  function call(data,id){return raw(JSON.stringify({id:id||'test:'+(++count),version:'2.4.10',data}));}
+  function call(data,id){return raw(JSON.stringify({id:id||'test:'+(++count),version:'2.4.11',data}));}
   function state(){const r=call({op:'read'});assert.equal(r.ok,true,r.error&&r.error.message);return r.data.state;}
   function action(op,extra={}){return call({op,token:state().token,ids:[101],...extra});}
   return {ctx,comp,app,call,raw,state,action,injectOffsetFailure(){failOffset=true;},useNativeTime(fn){nativeTime=fn;},addLayer(inPoint,outPoint){const l=make(inPoint,outPoint);comp.items.push(l);return l;},writes:()=>writes,undo:()=>undo,groups:()=>groups,loads:()=>loads};

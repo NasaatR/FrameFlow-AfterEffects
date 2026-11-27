@@ -10,7 +10,7 @@ staging="$frameflow_root/staging-$$"
 domain="com.adobe.CSXS.12"
 test -f "$package_root/extension/CSXS/manifest.xml"
 mkdir -p "$extensions_root" "$backup"
-printf '%s\n' 'FrameFlow 2.4.10 / AE 25-27 / CEP 12' 'Restart After Effects after installation so it rescans extensions.' 'Installs for this account and enables unsigned CEP 12 panels.'
+printf '%s\n' 'FrameFlow 2.4.11 / AE 25-27 / CEP 12' 'Restart After Effects after installation so it rescans extensions.' 'Installs for this account and enables unsigned CEP 12 panels.'
 if defaults read "$domain" PlayerDebugMode > "$backup/debug-value.txt" 2>/dev/null; then printf 'present\n' > "$backup/debug-state.txt"; else printf 'absent\n' > "$backup/debug-state.txt"; fi
 if defaults read-type "$domain" PlayerDebugMode > "$backup/debug-type.txt" 2>/dev/null; then :; fi
 if test -d "$destination"; then printf 'present\n' > "$backup/extension-state.txt"; else printf 'absent\n' > "$backup/extension-state.txt"; fi

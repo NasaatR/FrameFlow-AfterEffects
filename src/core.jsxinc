@@ -246,7 +246,7 @@ var FFCore = (function () {
         parseFavorites:favorites, defaults:defaults, parseSettings:parseSettings, encodeSettings:encodeSettings};
 }());
 
-/* FrameFlow AE 2.4.10. AE adapter; native values never pass through JSON. */
+/* FrameFlow AE 2.4.11. AE adapter; native values never pass through JSON. */
 var FFHost = (function () {
     var LIMITS = {properties:20000, keys:50000, reportLines:300, textCharacters:2000};
     var ROOTS = ["ADBE Transform Group", "ADBE Mask Parade", "ADBE Effect Parade", "ADBE MTrackers",
@@ -738,22 +738,26 @@ var FFHost = (function () {
         if (region === "after") return prop.keyTime(prop.numKeys) >= cti;
         return true;
     }
-    function mediaBoundaryLimit(layer, after, context) {
-        var source, duration, stretch, start, end, eps = context.frameDuration * 0.000001, limit = null;
+    function mediaBoundaryLimit(layer, after, eps) {
+        var source, precomp, duration, stretch, start, end, label, limit = null;
         try {
-            /* This rule concerns native finite footage only. Stills, precomps and remapped layers keep their existing behavior. */
             if (layer.timeRemapEnabled !== false) return null;
+            if (after.inPoint >= layer.inPoint-eps && after.outPoint <= layer.outPoint+eps) return null;
             source = layer.source;
-            if (!source || !source.mainSource || source.mainSource.isStill !== false) return null;
+            if (!source) return null;
+            // Precomps have a finite source duration without a FootageItem.mainSource.
+            precomp = source instanceof CompItem;
+            if (!precomp && (!source.mainSource || source.mainSource.isStill !== false)) return null;
+            label = precomp ? "Предел исходного прекомпа: " : "Предел исходного медиа: ";
             duration = source.duration; stretch = layer.stretch;
             if (typeof duration !== "number" || !isFinite(duration) || duration <= 0 || typeof stretch !== "number" || !isFinite(stretch) || stretch <= 0) return null;
             start = layer.startTime; end = start+duration*stretch/100;
             if (after.outPoint > layer.outPoint+eps && after.outPoint > end+eps) {
                 limit = {field:"Out",requested:after.outPoint,available:end};
-                limit.message = "Предел исходного медиа: Out запрошен "+after.outPoint+" s, доступен до "+end+" s. Весь слой пропущен.";
+                limit.message = label+"Out запрошен "+after.outPoint+" s, доступен до "+end+" s. Весь слой пропущен.";
             } else if (after.inPoint < layer.inPoint-eps && after.inPoint < start-eps) {
                 limit = {field:"In",requested:after.inPoint,available:start};
-                limit.message = "Предел исходного медиа: In запрошен "+after.inPoint+" s, доступен от "+start+" s. Весь слой пропущен.";
+                limit.message = label+"In запрошен "+after.inPoint+" s, доступен от "+start+" s. Весь слой пропущен.";
             }
             if (limit) { limit.layerIndex = layer.index; limit.layerId = layer.id; limit.sourceDuration = duration; limit.stretch = stretch; }
         } catch (unavailableMediaMetadata) { return null; }
@@ -1057,7 +1061,7 @@ var FFHost = (function () {
                     else plan.errors.push(labelFor(layer,[])+": this trim would cut a protected source region.");
                     continue;
                 }
-                var mediaLimit = mediaBoundaryLimit(layer,lp,context);
+                var mediaLimit = mediaBoundaryLimit(layer,lp,context.frameDuration * 0.000001);
                 if (mediaLimit) {
                     plan.mediaLimits.push(mediaLimit); plan.skips.push(labelFor(layer,[])+": "+mediaLimit.message); continue;
                 }
@@ -1297,14 +1301,18 @@ var FFHost = (function () {
                 c = plan.changes[i]; currentChange = c; useTiming(c);
                 validateOffsetChange(c,plan.request);
                 if (c.layer && (c.layer.locked || (c.ownerComp || plan.comp).layer(c.layer.index) !== c.layer)) throw new Error("Слой недоступен или заблокирован");
-                if (c.kind === "edge" && protectedTrim(c.layer,c.after,tolerance)) throw new Error("Protected source region changed. Preview again.");
+                if (c.kind === "edge") {
+                    if (protectedTrim(c.layer,c.after,tolerance)) throw new Error("Protected source region changed. Preview again.");
+                    var limit = mediaBoundaryLimit(c.layer,c.after,tolerance);
+                    if (limit) throw new Error("Source handles changed. Preview again. "+limit.message);
+                }
                 if (c.kind !== "property") {
                     checkLayer(c,false,tolerance); verifyLayerProperties(c,false,tolerance);
                     if (c.kind === "edge" && plan.request.mode === "edges") verifyEdgeKeyVisibility(c.layer,c.after,c.properties,null,tolerance);
                 }
                 else verifyProperty(target(c,plan.comp),c.snapshot,originalTimes(c.snapshot),tolerance);
             }
-            app.beginUndoGroup(plan.arrangement ? "FrameFlow AE 2.4.10 — "+plan.arrangement.action : plan.request.operation === "closeGap" ? "FrameFlow AE 2.4.10 — Убрать паузу" : "FrameFlow AE 2.4.10 — Time Offset"); opened = true;
+            app.beginUndoGroup(plan.arrangement ? "FrameFlow AE 2.4.11 — "+plan.arrangement.action : plan.request.operation === "closeGap" ? "FrameFlow AE 2.4.11 — Убрать паузу" : "FrameFlow AE 2.4.11 — Time Offset"); opened = true;
             for (i = 0; i < plan.changes.length; i++) {
                 phase = "apply"; c = plan.changes[i]; currentChange = c; useTiming(c); touched.push(c); result.attempted++;
                 if (c.kind === "layer") {
@@ -1386,7 +1394,7 @@ var FFHost = (function () {
         return result;
     }
     function environment() {
-        var lines = ["FrameFlow AE 2.4.10", "Дата: " + new Date().toString()];
+        var lines = ["FrameFlow AE 2.4.11", "Дата: " + new Date().toString()];
         function read(label,fn) { try { lines.push(label+": "+fn()); } catch (ignored) { lines.push(label+": неизвестно"); } }
         read("AE",function(){return app.version;}); read("Build",function(){return app.buildNumber;});
         read("OS",function(){return $.os;}); read("ExtendScript",function(){return $.version;});

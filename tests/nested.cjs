@@ -187,3 +187,19 @@ test('the hierarchy lists direct and deeper sources, including duplicate uses, b
   ]);
   assert.equal(root.writes(),0);
 });
+
+test('a nested target that loses precomp handles after preview is rejected before any write',()=>{
+  const {root,child,preview,apply}=setup(),layer=child.comp.layer(1);
+  const source=new root.ctx.CompItem();
+  Object.assign(source,{id:5,duration:12,frameDuration:1/30});
+  layer.source=source;
+  layer.keys.forEach((key,index)=>{key.time=3+index;});
+  const planned=preview({direction:1});
+  assert.equal(planned.data.preview.targets.some(t=>t.compId===2&&t.kind==='edge'),true);
+  source.duration=6;
+  const response=apply(planned).data;
+  assert.equal(response.failure.ok,false);
+  assert.match(response.message,/Source handles changed/);
+  assert.equal(root.groups(),0);
+  assert.equal(layer.outPoint,6);
+});

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.4.11
+
+- Check the available source span of precomps before extending their In or Out. The existing source limit policy keeps exhausted instances and their keys in place, or blocks before the first write.
+- Revalidate source handles before applying a captured plan, including targets inside nested compositions.
+
 ## 2.4.10
 
 - Accept bounded subframe rounding after AE writes a moved time, including native layer markers. Keep preview revalidation, untouched times and key attributes strict.
