@@ -1,5 +1,9 @@
 # FrameFlow status
 
+## 2.5.0
+
+FrameFlow resumes single-digit minor/patch numbering after the issued 2.4.14. The AE menu shows FrameFlow 2.5. The bundle and panel IDs are unchanged. Verify the installed panel and kernel both report 2.5.0 in native AE.
+
 ## 2.4.14
 
 The user confirmed that 2.4.13 performed After −5 in AE 27.0x78 and applied a preview omitting a conflicting layer. The new version reduces CEP calls for offsets and captured plans and keeps offset, key-conflict and gap previews in the panel. Recheck the new version in AE.

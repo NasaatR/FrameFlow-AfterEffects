@@ -67,7 +67,7 @@ def main():
     assert version_range, 'AEFT must declare an inclusive CEP version range'
     lower, upper = [tuple(map(int, (endpoint + '.0').split('.')[:3])) for endpoint in version_range.groups()]
     assert lower == (25, 0, 0) and (27, 99, 99) <= upper < (28, 0, 0), 'Expected AEFT 25.x through 27.x'
-    assert manifest.find('.//UI/Menu').text == 'FrameFlow 2.4'
+    assert manifest.find('.//UI/Menu').text == 'FrameFlow ' + version.rsplit('.', 1)[0]
     assert manifest.find('.//RequiredRuntime[@Name="CSXS"]').attrib['Version'] == '12.0'
     assert manifest.find('.//ScriptPath') is None
     assert (ROOT / 'extension' / manifest.find('.//MainPath').text).is_file()

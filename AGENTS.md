@@ -1,6 +1,7 @@
 # FrameFlow maintenance
 
 - Product source and release state: `ROADMAP_RU.md`, `docs/STATUS.md`. Extension recipes: `docs/EXTENDING.md`.
+- FrameFlow uses Nasaat's release numbering. Minor and patch are single digits: `2.4.8 → 2.4.9 → 2.5.0`, `2.9.9 → 3.0.0`. The issued legacy `2.4.10+` series moves to `2.5.0`. Display the zero-patch release as 2.5 in summaries and the AE menu. Use 2.5.0 in package, manifest, runtime and archive metadata. Check the newest issued version before a release, keep both CEP IDs and old artifacts, and align all version fields against `package.json` before building.
 - Add UI commands in `extension/js/commands.js`; reuse `extension/js/ui.js` and semantic tokens in `extension/css/panel.css`. Default UI is English with explicit Russian localization. Keep the primary panel compact.
 - Plan-only AE handlers live in `src/commands/*.jsxinc`. The build inserts them into the private CEP dispatcher. Preserve the existing loader, RPC version checks, captured-plan application, readback, Undo/recovery and uncertain-write no-replay behavior.
 - Host JSX is conservative ES3; browser JavaScript is a separate runtime. Never edit generated `extension/jsx/host.jsx` or `PREVIEW.html` directly. Generate them with `node tools/build.cjs` and `node tools/preview.cjs`.

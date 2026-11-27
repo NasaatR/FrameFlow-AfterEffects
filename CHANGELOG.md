@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.5.0
+
+- Carry the legacy 2.4 series to 2.5. The build checks single-digit minor and patch fields and matching panel, host and manifest versions. CEP bundle and panel IDs stay the same.
+
 ## 2.4.14
 
 - Send ordinary offsets to AE in one CEP request. The host reads the current cursor, selection and marker reference in that request.
