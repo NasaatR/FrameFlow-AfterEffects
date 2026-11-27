@@ -246,7 +246,7 @@ var FFCore = (function () {
         parseFavorites:favorites, defaults:defaults, parseSettings:parseSettings, encodeSettings:encodeSettings};
 }());
 
-/* FrameFlow AE 2.4.7. AE adapter; native values never pass through JSON. */
+/* FrameFlow AE 2.4.8. AE adapter; native values never pass through JSON. */
 var FFHost = (function () {
     var LIMITS = {properties:20000, keys:50000, reportLines:300, textCharacters:2000};
     var ROOTS = ["ADBE Transform Group", "ADBE Mask Parade", "ADBE Effect Parade", "ADBE MTrackers",
@@ -725,29 +725,40 @@ var FFHost = (function () {
         } catch (unavailableMediaMetadata) { return null; }
         return limit;
     }
-    function labelSelectedKeys(comp,request) {
-        var label = request.label, targets = [], layers = comp.selectedLayers, touched = 0, opened = false, selected = 0, scanned = 0;
-        var result = {ok:false,changed:0,movedKeys:0,attempted:0,skipped:0,partial:false,recoveryErrors:[]};
-        var i, j, k, layer, props, prop, old, target;
-        try {
-            if (!validKeyLabel(label)) throw new Error("Choose a key label from 0 to 16.");
-            for (i = 0; i < layers.length; i++) {
-                layer = layers[i]; props = scanLayer(layer);
-                for (j = 0; j < props.length; j++) {
-                    prop = props[j]; if (!prop.numKeys || prop.propertyValueType === PropertyValueType.MARKER) continue;
-                    scanned += prop.numKeys; if (scanned > LIMITS.keys) throw new Error("More than 50000 keys: narrow the selection.");
-                    for (k = 1; k <= prop.numKeys; k++) if (prop.keySelected(k)) {
-                        selected++;
-                        if (typeof prop.keyLabel !== "function" || typeof prop.setLabelAtKey !== "function") throw new Error("Keyframe labels require AE 22.6 or later.");
-                        old = prop.keyLabel(k);
-                        if (!validKeyLabel(old)) throw new Error("Could not read the original key label.");
-                        if (old === label) continue;
-                        if (layer.locked) throw new Error("A selected key is on a locked layer.");
-                        targets.push({prop:prop,index:k,original:old});
-                    }
+    function readSelectedKeyLabels(comp, visit) {
+        var layers = comp.selectedLayers, seen = {}, labels = [], scanned = 0, i, j, k, layer, props, prop, label;
+        for (i = 0; i < layers.length; i++) {
+            layer = layers[i]; props = scanLayer(layer);
+            for (j = 0; j < props.length; j++) {
+                prop = props[j]; if (!prop.numKeys || prop.propertyValueType === PropertyValueType.MARKER) continue;
+                scanned += prop.numKeys;
+                if (scanned > LIMITS.keys) throw new Error("More than 50000 keys: narrow the selection.");
+                for (k = 1; k <= prop.numKeys; k++) {
+                    if (!prop.keySelected(k)) continue;
+                    if (typeof prop.keyLabel !== "function") throw new Error("Keyframe labels require AE 22.6 or later.");
+                    label = prop.keyLabel(k);
+                    if (!validKeyLabel(label)) throw new Error("Could not read the original key label.");
+                    seen["l"+label] = true;
+                    if (visit) visit(prop,k,label,layer);
                 }
             }
-            if (!selected) throw new Error("Select one or more keyframes in After Effects.");
+        }
+        for (i = 0; i <= 16; i++) if (seen["l"+i]) labels.push(i);
+        if (!labels.length) throw new Error("Select one or more keyframes in After Effects.");
+        return labels;
+    }
+    function labelSelectedKeys(comp,request) {
+        var label = request.label, targets = [], touched = 0, opened = false;
+        var result = {ok:false,changed:0,movedKeys:0,attempted:0,skipped:0,partial:false,recoveryErrors:[]};
+        var i, target;
+        try {
+            if (!validKeyLabel(label)) throw new Error("Choose a key label from 0 to 16.");
+            readSelectedKeyLabels(comp,function (prop,index,old,layer) {
+                if (old === label) return;
+                if (typeof prop.setLabelAtKey !== "function") throw new Error("Keyframe labels require AE 22.6 or later.");
+                if (layer.locked) throw new Error("A selected key is on a locked layer.");
+                targets.push({prop:prop,index:index,original:old});
+            });
             if (targets.length) {
                 app.beginUndoGroup("FrameFlow — Label selected keys"); opened = true;
                 for (i = 0; i < targets.length; i++) {
@@ -1235,7 +1246,7 @@ var FFHost = (function () {
                 if (c.kind !== "property") { checkLayer(c,false,tolerance); verifyLayerProperties(c,false,tolerance); }
                 else verifyProperty(target(c,plan.comp),c.snapshot,originalTimes(c.snapshot),tolerance);
             }
-            app.beginUndoGroup(plan.arrangement ? "FrameFlow AE 2.4.7 — "+plan.arrangement.action : plan.request.operation === "closeGap" ? "FrameFlow AE 2.4.7 — Убрать паузу" : "FrameFlow AE 2.4.7 — Time Offset"); opened = true;
+            app.beginUndoGroup(plan.arrangement ? "FrameFlow AE 2.4.8 — "+plan.arrangement.action : plan.request.operation === "closeGap" ? "FrameFlow AE 2.4.8 — Убрать паузу" : "FrameFlow AE 2.4.8 — Time Offset"); opened = true;
             for (i = 0; i < plan.changes.length; i++) {
                 phase = "apply"; c = plan.changes[i]; currentChange = c; touched.push(c); result.attempted++;
                 if (c.kind === "layer") {
@@ -1306,7 +1317,7 @@ var FFHost = (function () {
         return result;
     }
     function environment() {
-        var lines = ["FrameFlow AE 2.4.7", "Дата: " + new Date().toString()];
+        var lines = ["FrameFlow AE 2.4.8", "Дата: " + new Date().toString()];
         function read(label,fn) { try { lines.push(label+": "+fn()); } catch (ignored) { lines.push(label+": неизвестно"); } }
         read("AE",function(){return app.version;}); read("Build",function(){return app.buildNumber;});
         read("OS",function(){return $.os;}); read("ExtendScript",function(){return $.version;});
@@ -1358,7 +1369,7 @@ var FFHost = (function () {
         return lines.join("\n");
     }
     return {readContext:readContext,selectedLayers:selectedLayers,inspectGap:inspectGap,prepareGap:prepareGap,prepareInterval:prepareInterval,prepareArrange:prepareArrange, prepare:prepare, applyPlan:applyPlan, report:report, environment:environment,
-        offsetOptions:offsetOptions, labelSelectedKeys:labelSelectedKeys, snapshotProperty:snapshotProperty, restoreProperty:restoreProperty, verifyProperty:verifyProperty,
+        offsetOptions:offsetOptions, readSelectedKeyLabels:readSelectedKeyLabels,labelSelectedKeys:labelSelectedKeys, snapshotProperty:snapshotProperty, restoreProperty:restoreProperty, verifyProperty:verifyProperty,
         scanLayer:scanLayer, pathOf:pathOf, errorInfo:errorInfo, originalTimes:originalTimes};
 }());
 

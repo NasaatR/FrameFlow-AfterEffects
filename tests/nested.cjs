@@ -122,3 +122,68 @@ test('cross-composition failure restores earlier targets and both selections in 
   assert.equal(later.selected,false);assert.equal(root.comp.layer(1).selected,true);
   assert.equal(root.groups(),1);assert.equal(root.undo(),0);
 });
+
+function useGuide(f,times) {
+  const layer=f.addLayer(0,12), property=layer.property;
+  layer.property=id=>id==='ADBE Marker'?{numKeys:times.length,keyTime:i=>times[i-1]}:property(id);
+  const response=f.call({op:'setMarkerReference',token:f.state().token,layerId:layer.id});
+  assert.equal(response.ok,true,response.error?.message);
+  return layer;
+}
+
+test('marker offsets recurse through Stretch and retain the contribution of markers outside the instance',()=>{
+  const {root,child,preview,apply}=setup();
+  root.comp.layer(1).inPoint=2;
+  useGuide(root,[1,3,5]);
+  const plan=preview({direction:1});
+  assert.equal(plan.ok,true,plan.error?.message);
+  assert.equal(plan.data.preview.markerReference.count,3);
+  assert.equal(plan.data.preview.nestedSources[0].id,2);
+  const target=plan.data.preview.targets.find(t=>t.compId===2);
+  assert.equal(target.minKeyDelta,0.125);
+  assert.equal(target.maxKeyDelta,0.375);
+  assert.equal(apply(plan).data.result.ok,true);
+  assert.deepEqual(times(child),[1.125,2.25,3.375]);
+  assert.equal(root.comp.layer(1).inPoint,2);
+  assert.equal(root.comp.layer(1).outPoint,6);
+  assert.equal(root.groups(),1);
+});
+
+test('a guide precomp stays outside the recursive target set',()=>{
+  const {root,child,preview,apply}=setup();
+  const guide=useGuide(root,[1,3]);
+  guide.source=child.comp;
+  assert.match(preview({ids:[101,guide.id]}).error.message,/outside/);
+  assert.deepEqual(times(child),[1,2,3]);
+  assert.equal(root.groups(),0);
+  root.comp.layer(1).source=guide; // The child source is only used by the guide now.
+  const response=preview({ids:[101,guide.id]});
+  assert.deepEqual(response.data.preview.nestedSources,[]);
+  assert.equal(apply(response).data.result.ok,true);
+  assert.deepEqual(times(child),[1,2,3]);
+});
+
+test('changing a root reference marker invalidates the captured nested plan before any write',()=>{
+  const {root,child,preview,apply}=setup(), boundaries=[1,3,5];
+  useGuide(root,boundaries);
+  const plan=preview({direction:1});
+  assert.equal(plan.data.preview.blocked,false);
+  boundaries[1]=3.125;
+  assert.match(apply(plan).data.failure.error.message,/markers moved/i);
+  assert.deepEqual(times(child),[1,2,3]);
+  assert.equal(root.groups(),0);
+});
+
+test('the hierarchy lists direct and deeper sources, including duplicate uses, before an offset is planned',()=>{
+  const {root,child}=setup();
+  const grand=fixture().comp;Object.setPrototypeOf(grand,root.ctx.CompItem.prototype);
+  grand.id=3;grand.name='Grand';
+  root.comp.layer(2).source=child.comp;
+  child.comp.layer(1).source=grand;
+  const result=root.call({op:'inspectPrecomps',scope:'all',token:root.state().token});
+  assert.equal(result.ok,true);
+  assert.deepEqual(result.data.hierarchy.rows.map(r=>[r.depth,r.source,r.shared]),[
+    [1,'Nested source',false],[1,'Nested source',true],[2,'Grand',false]
+  ]);
+  assert.equal(root.writes(),0);
+});

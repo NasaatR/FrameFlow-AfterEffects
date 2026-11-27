@@ -116,7 +116,7 @@ test('Report opens and copies synchronously even if the browser clipboard would 
 test('Report falls back to the browser clipboard, and reports a blocked copy honestly',async()=>{for(const fail of [false,true]){let copied='';const h=harness(null,{syncCopy:false,clipboard:{writeText:async value=>{if(fail)throw Error('Denied');copied=value;}}});try{await h.settle();h.$('open-report').click();await h.settle();if(fail){assert.match(h.$('report-copy-state').textContent,/заблокировано/);assert.equal(h.document.activeElement,h.$('report-text'));}else{assert.equal(copied,h.$('report-text').value);assert.match(h.$('report-copy-state').textContent,/Скопировано/);}}finally{h.dispose();}}});
 test('settings save zero, theme and quick steps; appearance reset preserves timing choices',async()=>{const h=harness();try{await h.settle();h.document.querySelector('[data-step="24"]').click();scope(h,'all');mode(h,'keys');h.$('open-settings').focus();h.$('open-settings').click();h.$('pref-spacing').value='0';h.$('pref-spacing').dispatch('input');h.$('dialog-body').querySelectorAll('[data-pref]').find(b=>b.dataset.pref==='theme'&&b.dataset.value==='light').click();assert.equal(h.document.body.classList.contains('light'),true);h.$('quick-step-values').value='3, 7, 15';h.$('quick-step-values').dispatch('input');await new Promise(r=>setTimeout(r,250));const saved=JSON.parse([...h.storage.values()][0]);assert.equal(saved.version,4);assert.equal(saved.spacing,0);assert.deepEqual(saved.quickSteps,[3,7,15]);h.$('reset-appearance').click();h.$('close-dialog').click();assert.equal(h.document.activeElement,h.$('open-settings'));assert.equal(Number(h.$('frames').value),24);assert.equal(h.$('scope').textContent,'Все слои');assert.match(h.$('mode').textContent,/Все ключи/);assert.equal(h.document.querySelectorAll('[data-step]').length,3);}finally{h.dispose();}});
 test('menu keyboard, help and modal focus stay usable',async()=>{const h=harness();try{await h.settle();h.$('mode').focus();h.$('mode').click();assert.equal(h.$('menu').hidden,false);const first=h.document.activeElement;h.key('ArrowDown');assert.notEqual(h.document.activeElement,first);h.key('Escape');assert.equal(h.$('menu').hidden,true);assert.equal(h.document.activeElement,h.$('mode'));h.$('open-help').focus();h.$('open-help').click();assert.match(h.$('dialog-body').textContent,/Авто/);h.key('Escape');assert.equal(h.$('overlay').hidden,true);assert.equal(h.document.activeElement,h.$('open-help'));}finally{h.dispose();}});
-test('cold startup works with scoped evalFile and a detached global namespace',async()=>{const f=require('./host-fixture.cjs').fixture({unloaded:true,detachedGlobal:true}),h=harness(f);try{await h.settle();assert.equal(h.$('connection').textContent,'AE');assert.equal(f.ctx.FrameFlowCEP,undefined);assert.equal(f.ctx.$.global.FrameFlowCEP.version,'2.4.7');h.$('open-report').click();assert.match(h.copies[0],/Загрузчик: ready \/ ядро: 2\.4\.7/);assert.match(h.copies[0],/build 99/);assert.equal(f.writes(),0);}finally{h.dispose();}});
+test('cold startup works with scoped evalFile and a detached global namespace',async()=>{const f=require('./host-fixture.cjs').fixture({unloaded:true,detachedGlobal:true}),h=harness(f);try{await h.settle();assert.equal(h.$('connection').textContent,'AE');assert.equal(f.ctx.FrameFlowCEP,undefined);assert.equal(f.ctx.$.global.FrameFlowCEP.version,'2.4.8');h.$('open-report').click();assert.match(h.copies[0],/Загрузчик: ready \/ ядро: 2\.4\.8/);assert.match(h.copies[0],/build 99/);assert.equal(f.writes(),0);}finally{h.dispose();}});
 test('connection failure stops background retries; explicit Refresh restores the compact controls',async()=>{const f=hostScene();let broken=true,calls=0;const h=harness(f,{transport(script,cb){calls++;if(broken)cb('EvalScript error.');else cb(vm.runInContext(script,f.ctx));}});try{await h.settle();assert.equal(calls,1);assert.equal(h.$('after-plus').disabled,true);h.focus();await new Promise(r=>setTimeout(r,2000));assert.equal(calls,1);h.$('open-report').click();assert.match(h.copies[0],/BOOT_EMPTY/);h.$('close-dialog').click();broken=false;h.$('refresh').click();await h.settle();assert.equal(h.$('connection').textContent,'AE');assert.equal(h.$('after-plus').disabled,false);}finally{h.dispose();}});
 test('invalid frame draft survives losing focus and a metadata refresh',async()=>{const f=hostScene(),h=harness(f);try{await h.settle();h.$('frames').focus();h.$('frames').value='';h.$('frames').dispatch('input');h.$('refresh').focus();h.$('refresh').click();await h.settle();assert.equal(h.$('frames').value,'');assert.equal(h.$('after-plus').disabled,true);h.document.querySelector('[data-step="5"]').click();assert.equal(Number(h.$('frames').value),5);assert.equal(h.$('after-plus').disabled,false);}finally{h.dispose();}});
 
@@ -217,5 +217,46 @@ test('time tools calculate exact steps and preview the cursor range before writi
     assert.equal(f.comp.workAreaStart,0);h.$('use-zone').click();assert.equal(Number(field.value),24);assert.equal(f.groups(),0);
     menu(h,'time-menu','time-zone');h.$('apply-zone').click();await h.settle();assert.equal(f.comp.workAreaStart,4);assert.equal(f.comp.workAreaDuration,1);
     menu(h,'time-menu','measure-time');await h.settle();h.$('use-seam').click();assert.equal(Number(field.value),96);
+  }finally{h.dispose();}
+});
+
+test('offset options inspect nested sources and import the actual selected key labels',async()=>{
+  const {fixture}=require('./host-fixture.cjs');
+  const f=fixture(),child=fixture().comp,layer=f.comp.layer(1);
+  Object.setPrototypeOf(child,f.ctx.CompItem.prototype);
+  child.id=203;child.name='Child <comp>';child.usedIn=[f.comp];
+  layer.source=child;layer.property(1).keyLabel=()=>9;f.comp.layer(2).selected=false;
+  const h=harness(f,{fresh:true});
+  try{
+    await h.settle();
+    h.$('open-settings').click();h.$('open-offset-options').click();
+    h.$('use-selected-labels').click();await h.settle();
+    assert.equal(h.$('dialog-body').querySelector('[data-label-id="9"]').getAttribute('aria-pressed'),'true');
+    h.$('inspect-precomps').click();await h.settle();
+    assert.match(h.$('dialog-body').innerHTML,/Child &lt;comp&gt;/);
+    h.$('hierarchy-depth').value='1';h.$('use-hierarchy-depth').click();
+    assert.equal(Number(h.$('offset-depth').value),1);
+    assert.equal(f.writes(),0);
+  }finally{h.dispose();}
+});
+
+test('the reference picker lists only layers with markers and can clear an unavailable reference',async()=>{
+  const f=hostScene(),source=f.comp.layer(2),property=source.property;
+  let count=1;
+  source.property=id=>id==='ADBE Marker'?{numKeys:count,keyTime:()=>5}:property(id);
+  const h=harness(f,{fresh:true}),writes=f.writes();
+  try{
+    await h.settle();
+    menu(h,'time-menu','markerReference');await h.settle();
+    assert.equal(h.$('marker-layer').value,String(source.id));
+    assert.doesNotMatch(h.$('dialog-body').innerHTML, /Layer 101/);
+    h.$('set-marker-reference').click();await h.settle();
+    assert.equal(f.state().markerReference.layerId,source.id);
+    count=0;
+    menu(h,'time-menu','markerReference');await h.settle();
+    assert.equal(h.$('set-marker-reference').disabled,true);
+    h.$('clear-marker-reference').click();await h.settle();
+    assert.equal(f.state().markerReference,null);
+    assert.equal(f.writes(),writes);
   }finally{h.dispose();}
 });

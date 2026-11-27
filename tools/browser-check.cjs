@@ -44,6 +44,31 @@ function logScreenshot(name){const data=fs.readFileSync(path.join(output,name)).
     await check('mode menu stays inside 320x280 and Escape restores focus',async()=>{await page.locator('#mode').click();const b=await page.locator('#menu').boundingBox();assert.ok(b.x>=0&&b.y>=0&&b.x+b.width<=320&&b.y+b.height<=280);await page.keyboard.press('Escape');assert.equal(await page.locator('#mode').evaluate(el=>document.activeElement===el),true);});
     await check('theme text contrast meets 4.5 to 1',async()=>{for(const theme of ['dark','light']){await page.locator('#open-settings').click();await page.locator('[data-pref="theme"][data-value="'+theme+'"]').click();const ratio=await page.evaluate(()=>{const style=getComputedStyle(document.body);return FFModel.contrast(style.getPropertyValue('--bg').trim(),style.getPropertyValue('--muted').trim());});assert.ok(ratio>=4.5,theme+' contrast '+ratio);await page.locator('#close-dialog').click();}});
     await check('invalid frame drafts leave only independent Plan commands enabled',async()=>{await page.locator('#frames').fill('');await page.locator('#preview-plan').click();assert.equal(await page.locator('#menu [data-choice="after:1"]').isEnabled(),false);assert.equal(await page.locator('#menu [data-choice="gap"]').isEnabled(),true);await page.keyboard.press('Escape');await page.locator('#frames').fill('12');});
+    await check('offset hierarchy and label selection fit a narrow panel and leave AE unchanged',async()=>{
+      const layer=host.comp.layer(1), source=layer.source, groups=host.groups();
+      const child=new host.ctx.CompItem();
+      Object.assign(child,{id:4001,name:'Browser fixture precomp with a long composition name',numLayers:0,duration:5});
+      const labels=host.comp.items.map(item=>[item.property(1),item.property(1).keyLabel]);
+      layer.source=child;for(const [property] of labels)property.keyLabel=()=>11;
+      try{
+        await page.locator('#open-settings').click();
+        await page.locator('#open-offset-options').click();
+        await page.locator('#use-selected-labels').click();
+        await page.waitForSelector('[data-label-id="11"][aria-pressed="true"]');
+        await page.locator('#inspect-precomps').click();
+        await page.waitForSelector('#hierarchy-depth');
+        assert.match(await page.locator('#dialog-body').textContent(),/Browser fixture precomp/);
+        assert.equal(await page.locator('#dialog-body').evaluate(el=>el.scrollWidth<=el.clientWidth+1),true);
+        await page.locator('#hierarchy-depth').selectOption('1');
+        await page.locator('#use-hierarchy-depth').click();
+        assert.equal(await page.locator('#offset-depth').inputValue(),'1');
+        await page.locator('#offset-depth').fill('0'); // Preserve the original scope for the catalogue checks.
+        await page.locator('#close-dialog').click();
+        assert.equal(host.groups(),groups);
+      }finally{
+        layer.source=source;for(const [property,previous] of labels){if(previous)property.keyLabel=previous;else delete property.keyLabel;}
+      }
+    });
     const fixtureRoot=path.join(output,'extension-with-extra-commands');fs.cpSync(path.join(root,'extension'),fixtureRoot,{recursive:true});
     const extraGroups=[{id:'tools',element:'tools-menu',title:['Tools','Инструменты']}],base={op:'arrange',form:'none',title:['Align tail','Конец к курсору'],args:{action:'alignOut',order:'top',anchor:'cursor',frames:1},context:['scope'],parameters:[],preview:'required'},extraCommands=[{...base,id:'alignTailShortcut',surface:'toolbar'},{...base,id:'tailInTools',surface:'menu',group:'tools'}];
     fs.appendFileSync(path.join(fixtureRoot,'js/commands.js'),'\nwindow.FFCommands=FFCommands.create(FFCommands.groups().concat('+JSON.stringify(extraGroups)+'),FFCommands.all().concat('+JSON.stringify(extraCommands)+'));\n');

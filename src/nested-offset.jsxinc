@@ -6,41 +6,54 @@ var FFNestedOffset = (function () {
         return copy;
     }
     function blocked(text) { throw new Error(text); }
-    function node(comp, time, delta, depth, layers) {
+    function node(comp, time, delta, depth, layers, markerTimes) {
         return {comp:comp,context:{comp:comp,cti:time,duration:comp.duration,frameDuration:comp.frameDuration},
-            delta:delta,depth:depth,layers:layers,instances:{},references:{},signature:[]};
+            delta:delta,depth:depth,layers:layers,markerTimes:markerTimes,instances:{},references:{},signature:[]};
     }
-    function checkProtected(comp,time,delta,region) {
-        var p = comp.markerProperty, i, marker, start, end;
+    function checkProtected(comp,request,time,delta) {
+        var p = comp.markerProperty, i, marker, start, end, guard;
         if (!p) return;
+        if (request.markerTimes) {
+            guard = request.region === "after" ? Infinity : -Infinity;
+            for (i = 0; i < request.markerTimes.length; i++) {
+                var boundary = request.markerTimes[i], count = request.region === "after" ? i+1 : request.markerTimes.length-i;
+                var moved = boundary+count*delta;
+                guard = request.region === "after" ? Math.min(guard,boundary,moved) : Math.max(guard,boundary,moved);
+            }
+        } else guard = request.region === "after" ? Math.min(time,time+delta) : Math.max(time,time+delta);
         for (i = 1; i <= p.numKeys; i++) {
             marker = p.keyValue(i);
             if (!marker.protectedRegion) continue;
             start = p.keyTime(i); end = start+marker.duration;
-            if (region === "after" ? end >= Math.min(time,time+delta) : start <= Math.max(time,time+delta))
+            if (request.region === "after" ? end >= guard : start <= guard)
                 blocked("Nested source contains a Protected Region on the affected side: "+comp.name);
         }
     }
     function graph(root,request) {
         var first = node(root,root.time,FFCore.offsetSeconds({frameDuration:root.frameDuration},request),0,
-            FFHost.selectedLayers(root,request.scope,request.layerIds));
-        var nodes = [first], byId = {}, parents = {}, inspected = 0, i, j, k, n, layer, source, child, ratio, time, delta, key, uses, parent, refs, l, ids;
+            FFHost.selectedLayers(root,request.scope,request.layerIds),request.markerTimes);
+        var local, adjusted, offset, markerCost = 0, nodes = [first], byId = {}, parents = {}, inspected = 0, i, j, k, n, layer, source, child, ratio, time, delta, key, uses, parent, refs, l, ids;
         byId["c"+root.id] = first;
         for (i = 0; i < nodes.length; i++) {
             n = nodes[i]; n.signature.push(n.comp.id,n.comp.duration,n.comp.frameDuration,n.context.cti,n.delta);
-            if (n.depth) checkProtected(n.comp,n.context.cti,n.delta,request.region);
+            local = copyRequest(request);
+            local.markerTimes = n.markerTimes;
+            if (n.depth) checkProtected(n.comp,local,n.context.cti,n.delta);
             for (j = 0; j < n.layers.length; j++) {
                 layer = n.layers[j]; source = layer.source;
                 if (++inspected > 20000) blocked("Nested offset exceeds 20000 layers. Reduce scope or depth.");
                 n.signature.push(layer.id,layer.inPoint,layer.outPoint,layer.startTime,layer.stretch,layer.locked,layer.enabled,
                     layer.timeRemapEnabled,source instanceof CompItem ? source.id : 0);
-                if (n.depth === request.depth || !(source instanceof CompItem) ||
+                if (layer.id === request.markerLayerId || n.depth === request.depth || !(source instanceof CompItem)) continue;
+                if (n.markerTimes ? !FFMarkerReference.crosses(local,layer.inPoint,layer.outPoint,false) :
                     !(layer.inPoint < n.context.cti && layer.outPoint > n.context.cti)) continue;
                 if (layer.locked && request.skipLocked || layer.enabled === false && request.skipDisabled) continue;
                 if (layer.locked) blocked("Nested precomp layer is locked: "+layer.name);
                 if (layer.timeRemapEnabled || source.useProxy || typeof layer.stretch !== "number" || !isFinite(layer.stretch) || layer.stretch <= 0)
                     blocked("Nested offset needs a positive Stretch and an unremapped, original precomp source: "+layer.name);
-                ratio = 100/layer.stretch; time = (n.context.cti-layer.startTime)*ratio; delta = n.delta*ratio;
+                ratio = 100/layer.stretch;
+                time = ((n.markerTimes ? n.markerTimes[0] : n.context.cti)-layer.startTime)*ratio;
+                delta = n.delta*ratio;
                 if (!isFinite(time) || !isFinite(delta) || Math.abs(delta) > 10800)
                     blocked("Invalid nested time mapping: "+layer.name);
                 key = "c"+source.id; child = byId[key];
@@ -51,7 +64,18 @@ var FFNestedOffset = (function () {
                         blocked("Shared precomp instances need identical source timing and depth: "+source.name);
                 } else {
                     if (source.numLayers > 2000) blocked("Nested source exceeds 2000 layers: "+source.name);
-                    child = node(source,time,delta,n.depth+1,FFHost.selectedLayers(source,"all"));
+                    adjusted = null;
+                    if (n.markerTimes) {
+                        markerCost += n.markerTimes.length;
+                        if (markerCost > 100000) blocked("Nested marker mapping exceeds 100000 times. Reduce scope or depth.");
+                        adjusted = [];
+                        for (offset = 0; offset < n.markerTimes.length; offset++) {
+                            var mapped = (n.markerTimes[offset]-layer.startTime)*ratio;
+                            if (!isFinite(mapped) || offset && mapped <= adjusted[offset-1]) blocked("Invalid nested marker mapping: "+layer.name);
+                            adjusted.push(mapped);
+                        }
+                    }
+                    child = node(source,time,delta,n.depth+1,FFHost.selectedLayers(source,"all"),adjusted);
                     byId[key] = child; nodes.push(child);
                 }
                 n.instances["l"+layer.id] = true;
@@ -84,14 +108,13 @@ var FFNestedOffset = (function () {
     }
     function prepare(comp,request) {
         var nodes, root, i, j, k, n, local, part, change, total = 0, prefix;
-        if (request.markerTimes) blocked("Clear the marker reference or use root-only depth for marker offsets.");
         nodes = graph(comp,request);
         for (i = 0; i < nodes.length; i++) {
             n = nodes[i]; local = copyRequest(request); local.nestedInstances = n.instances;
-            if (i) { local.scope = "all"; delete local.layerIds; local.deltaSeconds = n.delta; }
+            if (i) { local.scope = "all"; delete local.layerIds; local.deltaSeconds = n.delta; local.markerTimes = n.markerTimes; }
             part = FFHost.prepare(local,n.context);
             for (j = 0; j < part.changes.length; j++) {
-                change = part.changes[j]; change.ownerComp = n.comp; change.delta = n.delta;
+                change = part.changes[j]; change.ownerComp = n.comp; if (typeof change.delta !== "number") change.delta = n.delta;
                 if (i) change.label = n.comp.name+" / "+change.label;
                 if (change.snapshot) total += change.snapshot.keys.length;
                 if (change.properties) for (k = 0; k < change.properties.length; k++) total += change.properties[k].snapshot.keys.length;
@@ -117,5 +140,26 @@ var FFNestedOffset = (function () {
         for (i = 0; i < now.length; i++) if (now[i].comp !== old[i].comp ||
             now[i].signature.join("|") !== old[i].signature.join("|")) blocked("Nested precomp timing or scope changed. Preview again.");
     }
-    return {prepare:prepare,validate:validate};
+    function hierarchy(root,scope) {
+        var waiting = [{comp:root,depth:0,layers:FFHost.selectedLayers(root,scope)}], seen = {}, rows = [];
+        var i, j, n, l, source, known, omitted = false, inspected = 0;
+        seen["c"+root.id] = true;
+        for (i = 0; i < waiting.length && !omitted; i++) {
+            n = waiting[i];
+            for (j = 0; j < n.layers.length; j++) {
+                if (++inspected > 20000) { omitted = true; break; }
+                l = n.layers[j]; source = l.source;
+                if (!(source instanceof CompItem)) continue;
+                if (rows.length >= 200 || source.numLayers > 2000) { omitted = true; break; }
+                known = seen["c"+source.id] === true;
+                rows.push({depth:n.depth+1,parent:n.comp.name,instance:l.name,source:source.name,shared:known});
+                if (!known) {
+                    seen["c"+source.id] = true;
+                    waiting.push({comp:source,depth:n.depth+1,layers:FFHost.selectedLayers(source,"all")});
+                }
+            }
+        }
+        return {rows:rows,limited:omitted};
+    }
+    return {prepare:prepare,validate:validate,hierarchy:hierarchy};
 }());

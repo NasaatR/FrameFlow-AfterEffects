@@ -1,6 +1,6 @@
 /* FrameFlow CEP host. Data-only RPC; no eval, command IDs, network or file writes. */
 var FFCEP = (function () {
-    var VERSION = "2.4.7", serial = 0, session = String(new Date().getTime()) + "-" + String(Math.random());
+    var VERSION = "2.4.8", serial = 0, session = String(new Date().getTime()) + "-" + String(Math.random());
     var saved = null, recent = [], busy = false, prepared = null, planSerial = 0;
     function fail(message) { throw new Error(message); }
     function own(o, k) { return Object.prototype.hasOwnProperty.call(o, k); }
@@ -320,6 +320,10 @@ var FFCEP = (function () {
         if (r.op === "read") { schema(r, "|op|"); return {state:snapshot()}; }
         c = current(r.token);
         if (r.op !== "applyPreview") prepared = null;
+        if (r.op === "readMarkerGuides") {
+            schema(r,"|op||token|");
+            return {state:snapshot(),guides:FFMarkerReference.guides(c)};
+        }
         if (r.op === "setMarkerReference" || r.op === "clearMarkerReference") {
             if (r.op === "setMarkerReference") {
                 schema(r, "|op||token||layerId|");
@@ -329,6 +333,15 @@ var FFCEP = (function () {
                 FFMarkerReference.clear(c);
             }
             return {state:snapshot()};
+        }
+        if (r.op === "readSelectedKeyLabels") {
+            schema(r,"|op||token|");
+            return {state:snapshot(),labelIds:FFHost.readSelectedKeyLabels(c)};
+        }
+        if (r.op === "inspectPrecomps") {
+            schema(r,"|op||token||scope|");
+            if (r.scope !== "auto" && r.scope !== "all" && r.scope !== "selected") fail("Choose a layer scope.");
+            return {state:snapshot(),hierarchy:FFNestedOffset.hierarchy(c,r.scope)};
         }
         if (r.op === "labelSelectedKeys") {
             schema(r, "|op||token||label|"); number(r.label, 0, 16, true);

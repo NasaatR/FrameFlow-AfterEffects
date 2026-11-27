@@ -122,3 +122,14 @@ test('label availability, valid IDs and locked target checks precede every write
   }
   assert.equal(f.groups(),0);
 });
+
+test('read label slots from the active key selection without writing to AE',()=>{
+  const host=fixture(),layer=host.comp.layer(1),other=host.comp.layer(2);
+  layer.keys[0].selected=true;
+  layer.property(1).keyLabel=i=>[0,12,6][i-1];
+  other.selected=false;
+  const result=host.call({op:'readSelectedKeyLabels',token:host.state().token});
+  assert.equal(result.ok,true);
+  assert.deepEqual(result.data.labelIds,[0,12]);
+  assert.equal(host.writes(),0);
+});

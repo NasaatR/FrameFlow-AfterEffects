@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.4.8
+
+- Combine marker-reference offsets with nested source retiming. Map marker boundaries and signed steps through the instance Stretch, and verify guide times and shared source usage before applying.
+- Inspect precomposition hierarchy within the current scope and pick a depth without writing to the project.
+- Load label filter slots from selected AE keyframes. The marker reference picker lists layers with markers and keeps Clear available for stale selections.
+
 ## 2.4.7
 
 - Add direction-aware offsets inside nested compositions with depth control and a required preview. Show composition and layer names in the plan.

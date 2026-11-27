@@ -100,6 +100,14 @@ var FFMarkerReference = (function () {
         pos = boundary(a,Math.max(first,layer.inPoint),true);
         return pos < a.length && a[pos] <= last && a[pos] < layer.outPoint;
     }
-    return {set:set,clear:clear,describe:describe,attach:attach,validate:validate,steps:steps,crosses:crosses,
+    function guides(comp) {
+        var result = [], i, layer, prop;
+        for (i = 1; i <= comp.numLayers; i++) {
+            layer = comp.layer(i); prop = markers(layer);
+            if (prop && prop.numKeys) result.push({id:layer.id,index:i,name:layer.name,selected:layer.selected,count:prop.numKeys});
+        }
+        return result;
+    }
+    return {guides:guides,set:set,clear:clear,describe:describe,attach:attach,validate:validate,steps:steps,crosses:crosses,
         layerPlan:layerPlan,spansKeys:spansKeys};
 }());

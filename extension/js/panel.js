@@ -302,9 +302,10 @@
     openDialog(t('Offset options','Параметры сдвига'),
       '<h3>'+t('Precompositions','Прекомпозиции')+'</h3>'+
       '<label class="setting-row"><span>'+t('Nested depth','Глубина вложенности')+'</span><input id="offset-depth" class="arrange-number" type="number" step="1" min="-1" max="1000" value="'+prefs.depth+'"></label>'+
-      '<p class="note">'+t('0 edits the current composition. 1 includes its direct sources. −1 includes all levels. Nested changes open a plan.','0 — текущая композиция. 1 — также её прямые прекомпозиции. −1 — все уровни. Вложенные изменения открываются в плане.')+'</p>'+
+      '<button id="inspect-precomps" class="secondary-button">'+t('Inspect hierarchy…','Посмотреть вложения…')+'</button><p class="note">'+t('0 edits the current composition. 1 includes its direct sources. −1 includes all levels. Nested changes open a plan.','0 — текущая композиция. 1 — также её прямые прекомпозиции. −1 — все уровни. Вложенные изменения открываются в плане.')+'</p>'+
       '<h3>'+t('Keyframe labels','Метки ключей')+'</h3>'+choice('labelFilter',[['off',t('Off','Выкл.')],['protect',t('Protect selected labels','Защитить метки')],['only',t('Move only these labels','Только эти метки')]])+
       '<div class="label-grid" role="group" aria-label="'+t('AE label numbers','Номера меток AE')+'">'+labels+'</div><p id="filter-hint" class="note"></p>'+
+      '<button id="use-selected-labels" class="secondary-button">'+t('Read labels from selected keys','Взять метки выделенных ключей')+'</button>'+
       '<div class="setting-row"><label for="key-label">'+t('Label for selected AE keys','Метка для выделенных ключей AE')+'</label><input id="key-label" class="arrange-number" type="number" step="1" min="0" max="16" value="'+(prefs.labelIds[0]||0)+'"></div>'+
       '<button id="assign-key-label" class="secondary-button">'+t('Assign to selected keys','Назначить выделенным ключам')+'</button>'+
       '<h3>'+t('Skip during offset','Пропускать при сдвиге')+'</h3><div class="settings-grid">'+
@@ -319,7 +320,7 @@
       body.querySelectorAll('[data-label-id]').forEach(b=>b.setAttribute('aria-pressed',String(prefs.labelIds.includes(Number(b.dataset.labelId)))));
       body.querySelectorAll('[data-pref]').forEach(b=>{const active=b.dataset.value===prefs.labelFilter;b.setAttribute('aria-pressed',String(active));b.classList.toggle('active',active);});
       assign.disabled=!ready()||isDemo||!/^\d+$/.test(label.value)||Number(label.value)>16;
-      $('offset-markers').disabled=!ready()||isDemo;
+      for(const id of ['offset-markers','inspect-precomps','use-selected-labels'])$(id).disabled=!ready()||isDemo;
     }
     body.querySelectorAll('[data-pref]').forEach(b=>b.onclick=()=>{change('labelFilter',b.dataset.value);sync();});
     body.querySelectorAll('[data-label-id]').forEach(b=>b.onclick=()=>{
@@ -344,18 +345,55 @@
       $('offset-options-status').textContent=D(statusRaw);
       sync();
     });
-    $('offset-markers').onclick=showMarkerReference;
+    $('inspect-precomps').onclick=safe(()=>showPrecompHierarchy(compId));
+    $('use-selected-labels').onclick=safe(async()=>{
+      const revision=dialogRevision;
+      const result=await request({op:'readSelectedKeyLabels'},false,compId);
+      if(revision!==dialogRevision)return;
+      if(result&&Array.isArray(result.labelIds)){
+        change('labelIds',result.labelIds);
+        $('offset-options-status').textContent=t('Labels loaded from AE keys.','Метки загружены из ключей AE.');
+      }else $('offset-options-status').textContent=D(statusRaw);
+      sync();
+    });
+    $('offset-markers').onclick=safe(showMarkerReference);
     sync();
   }
-  function showMarkerReference(){
+  async function showPrecompHierarchy(compId){
+    const revision=dialogRevision;
+    const result=await request({op:'inspectPrecomps',scope:prefs.scope},false,compId);
+    if(!result||!result.hierarchy||revision!==dialogRevision)return;
+    const {rows,limited}=result.hierarchy;
+    const levels=[0,...new Set(rows.map(row=>row.depth))];
+    if(rows.length)levels.push(-1);
+    const defaultLevel=levels.includes(prefs.depth)?prefs.depth:0;
+    const options=levels.map(level=>'<option value="'+level+'"'+(defaultLevel===level?' selected':'')+'>'+
+      (level<0?t('All levels','Все уровни'):level===0?t('Current comp','Текущая композиция'):t('Depth ','Глубина ')+level)+'</option>').join('');
+    const items=rows.map(row=>'<div class="plan-target"><div class="plan-target-title"><strong>'+esc(row.source)+'</strong><span>'+
+      t('Level ','Уровень ')+row.depth+'</span></div><p>'+esc(row.parent)+' / '+esc(row.instance)+(row.shared?' · '+t('Shared source','Общий источник'):'')+'</p></div>').join('');
+    openDialog(t('Precomp hierarchy','Вложенные композиции'),'<p class="plan-context">'+esc(result.state.name)+' · '+esc(scopeNames()[prefs.scope])+'</p>'+
+      '<label for="hierarchy-depth">'+t('Offset depth','Глубина сдвига')+'</label><select id="hierarchy-depth" class="layer-picker">'+options+'</select><div class="operation-actions"><button id="use-hierarchy-depth" class="primary-button">'+t('Use this depth','Выбрать глубину')+'</button></div>'+
+      (rows.length?'<div class="plan-targets">'+items+'</div>':'<p class="note">'+t('No precomps in this scope.','В этой области нет прекомпозиций.')+'</p>')+
+      (limited?'<p class="note">'+t('The list is capped. Narrow the layer scope to inspect more detail.','Список ограничен. Сузьте область слоёв для подробного просмотра.')+'</p>':''));
+    $('hierarchy-depth').value=String(defaultLevel);
+    $('use-hierarchy-depth').onclick=()=>{
+      change('depth',Number($('hierarchy-depth').value));
+      showOffsetOptions();
+    };
+  }
+  async function showMarkerReference(){
     if(!ready()||isDemo)return;
-    const compId=state.compId,reference=state.markerReference,selected=state.layers.find(l=>l.selected);
-    const activeId=reference?reference.layerId:selected?selected.id:state.layers.length?state.layers[0].id:null;
-    const options=state.layers.map((l,i)=>'<option value="'+l.id+'"'+(l.id===activeId?' selected':'')+'>#'+(l.index||i+1)+' · '+esc(l.name)+'</option>').join('');
+    const compId=state.compId,revision=dialogRevision;
+    const result=await request({op:'readMarkerGuides'},false,compId);
+    if(!result||!Array.isArray(result.guides)||revision!==dialogRevision)return;
+    const reference=result.state.markerReference, guides=result.guides;
+    const preferred=guides.find(l=>reference&&l.id===reference.layerId)||guides.find(l=>l.selected)||guides[0];
+    const activeId=preferred?preferred.id:null;
+    const options=guides.map(l=>'<option value="'+l.id+'"'+(l.id===activeId?' selected':'')+'>#'+l.index+' · '+esc(l.name)+' ('+l.count+')</option>').join('');
     openDialog(t('Marker reference','Опорные маркеры'),
       '<p class="plan-context">'+esc(state.name)+'</p><p class="note">'+t('Choose a layer with markers. Each marker defines a Before/After boundary and contributes one step. The reference layer stays in place.','Выберите слой с маркерами. Каждый маркер задаёт границу «До/После» и добавляет один шаг сдвига. Опорный слой остаётся на месте.')+'</p>'+
       (reference?'<p>'+t('Current reference · ','Опорный слой · ')+esc(reference.name)+' ('+reference.count+')</p>':'')+
-      '<label for="marker-layer">'+t('Reference layer','Слой с маркерами')+'</label><select id="marker-layer" class="layer-picker">'+options+'</select>'+
+      (options?'<label for="marker-layer">'+t('Reference layer','Слой с маркерами')+'</label><select id="marker-layer" class="layer-picker">'+options+'</select>':'<p class="note">'+t('Add at least one layer marker in AE to pick a reference.','Добавьте хотя бы один маркер на слой в AE.')+'</p>')+
       '<p id="marker-status" class="settings-status" role="status"></p><div class="operation-actions"><button id="set-marker-reference" class="primary-button" '+(options?'':'disabled')+'>'+t('Use layer markers','Использовать маркеры')+'</button>'+
       '<button id="clear-marker-reference" class="secondary-button" '+(reference?'':'disabled')+'>'+t('Clear reference','Убрать привязку')+'</button></div>');
     const picker=$('marker-layer');if(activeId!==null)picker.value=String(activeId);

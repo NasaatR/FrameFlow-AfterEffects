@@ -1,5 +1,9 @@
 # FrameFlow status
 
+## 2.4.8
+
+Closes the marker-reference and nested-source combination gap and adds a read-only hierarchy picker. The reference review used embedded UI strings from Time Offset 1.4 and the author's public version history. See [workflow comparison](TIME_OFFSET_COMPARISON.md). Native AE 27 tests are open.
+
 ## 2.4.7
 
 The reproduced case uses a 24 fps timeline, cursor at frame 141 and After −5. The expected result on a crossing animated layer is that only later keys move five frames earlier. Nested previews, marker-reference timing, key-label options, session timing tools and KBar are covered by the packaged verification suite. After Effects 27.0x78, native Undo/Redo, installed KBar and both OS installers still require a workstation check.
