@@ -1,5 +1,9 @@
 # FrameFlow status
 
+## 2.4.14
+
+The user confirmed that 2.4.13 performed After −5 in AE 27.0x78 and applied a preview omitting a conflicting layer. The new version reduces CEP calls for offsets and captured plans and keeps offset, key-conflict and gap previews in the panel. Recheck the new version in AE.
+
 ## 2.4.13
 
 The browser check positions both layers across the cursor independently of earlier arrangement tests. The one-time key-conflict preview remains the same.

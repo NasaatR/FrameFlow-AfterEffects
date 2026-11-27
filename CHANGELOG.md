@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.4.14
+
+- Send ordinary offsets to AE in one CEP request. The host reads the current cursor, selection and marker reference in that request.
+- Show offset and Close Gap previews in the panel. Expand Details to render the target list and preflight reasons.
+- Apply a captured plan or request a one-time preview without conflicting layers in a single host call with the original context check.
+- Format the technical report once for direct writes.
+
 ## 2.4.13
 
 - Isolate the browser test for the blocked key-conflict dialog from earlier arrangement edits.

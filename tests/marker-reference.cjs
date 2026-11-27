@@ -46,6 +46,21 @@ test('offset uses all fixed reference markers; keys spanning a marker keep the l
   assert.deepEqual(s.source.keys.map(k=>k.time),[1,2,3]);
   assert.equal(s.f.groups(),1);
 });
+test('live offset checks the active reference even when the panel requested a direct write',()=>{
+  const s=scenario();
+  s.bind();
+  const request={op:'offset',live:true,scope:'all',mode:'offset',region:'after',direction:1,
+    frames:6,preview:false,compMarkers:false};
+  const mixed=s.f.call({...request,token:s.f.state().token});
+  assert.equal(mixed.ok,false);
+  const response=s.f.call(request);
+  assert.equal(response.ok,true,response.error?.message);
+  assert.equal(response.data.preview.markerReference.layerId,s.source.id);
+  assert.equal(s.f.writes(),0);
+  assert.equal(s.apply(response.data.preview).data.result?.ok,true);
+  assert.deepEqual(s.target.keys.map(k=>k.time),[1,2.25,3.5]);
+});
+
 test('Before and After retain the existing exact-boundary rule at every marker',()=>{
   for(const [region,expected] of [['before',[1.25,2,3]],['after',[1.25,2.5,3.5]]]){
     const s=scenario([1,2]); s.bind();

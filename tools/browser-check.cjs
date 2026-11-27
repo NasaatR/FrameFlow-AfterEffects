@@ -20,7 +20,8 @@ function logScreenshot(name){const data=fs.readFileSync(path.join(output,name)).
     await page.addInitScript(()=>{window.__adobe_cep__={getSystemPath:()=>'/test/FrameFlow',evalScript(script,cb){window.__ffHostEval(script).then(cb);},getHostEnvironment:()=>JSON.stringify({appSkinInfo:{panelBackgroundColor:{color:{red:24,green:24,blue:26}}}})};});
     await page.goto('file://'+path.join(root,'extension/index.html'));await page.waitForFunction(()=>document.getElementById('connection').textContent==='AE');
     const menu=async(owner,value)=>{await page.locator('#'+owner).click();await page.locator('#menu [data-choice="'+value+'"]').click();};
-    const fits=()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth&&document.querySelector('.content').scrollWidth<=document.querySelector('.content').clientWidth);
+    const fits=()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth&&
+      ['.content','#offset-plan'].every(selector=>{const region=document.querySelector(selector);return region.scrollWidth<=region.clientWidth;}));
     await screenshot(page,'main-dark');
     await check('English default and reduced controls',async()=>{assert.equal(await page.locator('html').getAttribute('lang'),'en');assert.match(await page.locator('#scope').textContent(),/Auto/);assert.match(await page.locator('#mode').textContent(),/Layers \+ Keys/);for(const selector of ['#preview-toggle','#cti-label','#scope-hint','.shift-label','[data-scope]'])assert.equal(await page.locator(selector).count(),0);assert.equal(await page.locator('#before-plus').textContent(),'12');});
     await check('all main commands fit the default 360x290 panel',async()=>{const fit=await page.evaluate(()=>{const box=document.querySelector('.content').getBoundingClientRect(),bottom=Math.max(...[...document.querySelectorAll('.utility-row button')].map(el=>el.getBoundingClientRect().bottom));return {bottom,limit:box.bottom,scroll:document.querySelector('.content').scrollHeight,client:document.querySelector('.content').clientHeight};});assert.ok(fit.bottom<=fit.limit+1,JSON.stringify(fit));});
@@ -28,7 +29,7 @@ function logScreenshot(name){const data=fs.readFileSync(path.join(output,name)).
     await page.setViewportSize({width:360,height:290});
     await check('20 frame edits retain dropdown nodes and avoid global style/HTML mutations',async()=>{const observed=await page.evaluate(async()=>{let styles=0,html=0;const scope=document.querySelector('#scope svg'),mode=document.querySelector('#mode svg'),a=new MutationObserver(records=>styles+=records.length),b=new MutationObserver(records=>html+=records.length);a.observe(document.documentElement,{attributes:true,attributeFilter:['style']});for(const id of ['scope','mode'])b.observe(document.getElementById(id),{childList:true,subtree:true});const slider=document.getElementById('frame-slider');for(let n=13;n<=32;n++){slider.value=String(n);slider.dispatchEvent(new Event('input',{bubbles:true}));}await new Promise(requestAnimationFrame);a.disconnect();b.disconnect();return {styles,html,same:scope===document.querySelector('#scope svg')&&mode===document.querySelector('#mode svg'),step:document.querySelector('#after-plus .step-value').textContent};});assert.deepEqual(observed,{styles:0,html:0,same:true,step:'32'});await page.locator('#frames').fill('12');});
     await menu('preview-plan','after:1');await page.waitForSelector('#apply-preview');await screenshot(page,'plan-dark');
-    await check('preview is read-only and Apply executes the captured plan once',async()=>{assert.equal(host.groups(),0);assert.equal(await page.locator('#apply-preview').isEnabled(),true);await page.locator('#apply-preview').click();await page.waitForFunction(()=>document.getElementById('overlay').hidden&&document.getElementById('status').textContent.includes('Done'));assert.equal(host.groups(),1);assert.equal(host.comp.items[1].inPoint,6.5);});
+    await check('preview is read-only and Apply executes the captured plan once',async()=>{assert.equal(host.groups(),0);assert.equal(await page.locator('#overlay').isHidden(),true);assert.equal(await page.locator('#offset-plan-details-body .plan-target').count(),0);await page.locator('#offset-plan-details summary').click();await page.waitForSelector('#offset-plan-details-body .plan-target');assert.equal(await page.locator('#apply-preview').isEnabled(),true);await page.locator('#apply-preview').click();await page.waitForFunction(()=>document.getElementById('overlay').hidden&&document.getElementById('status').textContent.includes('Done'));assert.equal(host.groups(),1);assert.equal(host.comp.items[1].inPoint,6.5);});
     await menu('preview-plan','after:1');await page.waitForSelector('#apply-preview');host.comp.time=9;
     await check('changed AE cursor rejects the captured plan without writing',async()=>{await page.locator('#apply-preview').click();await page.waitForFunction(()=>/expired|changed/i.test(document.getElementById('status').textContent));assert.equal(host.groups(),1);});host.comp.time=4;
     await check('Time menu opens an explicit interval policy before read-only preview',async()=>{await menu('time-menu','insert');await page.waitForSelector('#interval-preview');assert.equal(host.groups(),1);await page.locator('#interval-preview').click();await page.waitForSelector('#apply-preview');assert.equal(host.groups(),1);assert.match(await page.locator('#dialog-body').textContent(),/No layers or keys are deleted/);assert.equal(await page.locator('#apply-preview').isEnabled(),true);await page.locator('#close-dialog').click();});
@@ -80,7 +81,8 @@ function logScreenshot(name){const data=fs.readFileSync(path.join(output,name)).
       await page.waitForSelector('#apply-preview');
       assert.equal(host.groups(),groups);
       assert.equal(await fits(),true);
-      await page.locator('#close-dialog').click();
+      assert.equal(await page.locator('#overlay').isHidden(),true);
+      await page.locator('#close-offset-plan').click();
       await menu('mode','offset');
     });
     await check('key-order conflicts offer a checked skip at 320 px without editing the scene',async()=>{
@@ -98,7 +100,9 @@ function logScreenshot(name){const data=fs.readFileSync(path.join(output,name)).
         await page.waitForFunction(()=>!document.getElementById('apply-preview').disabled);
         assert.equal(host.groups(),groups);
         assert.equal(await fits(),true);
-        await page.locator('#close-dialog').click();
+        assert.equal(await page.locator('#overlay').isHidden(),true);
+        await page.keyboard.press('Escape');
+        assert.equal(await page.locator('#offset-plan').isHidden(),true);
       }finally{
         host.comp.time=time;first.inPoint=starts[0];first.outPoint=out;second.inPoint=starts[1];
         host.comp.items.forEach((layer,i)=>layer.keys.forEach((key,j)=>{key.time=keyTimes[i][j];}));

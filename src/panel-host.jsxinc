@@ -1,6 +1,6 @@
 /* FrameFlow CEP host. Data-only RPC; no eval, command IDs, network or file writes. */
 var FFCEP = (function () {
-    var VERSION = "2.4.13", serial = 0, session = String(new Date().getTime()) + "-" + String(Math.random());
+    var VERSION = "2.4.14", serial = 0, session = String(new Date().getTime()) + "-" + String(Math.random());
     var saved = null, recent = [], busy = false, prepared = null, planSerial = 0;
     function fail(message) { throw new Error(message); }
     function own(o, k) { return Object.prototype.hasOwnProperty.call(o, k); }
@@ -315,10 +315,17 @@ var FFCEP = (function () {
             interval:r.interval || null,keptTargets:plan.keptCrossing ? plan.keptCrossing.slice(0,100) : []};
     }
     function action(r) {
-        var c, layers, i, on = {}, plan, result, report, state, id, pending;
+        var c, layers, i, on = {}, plan, result, report, state, id, pending, context;
         if (prepared && new Date().getTime()-prepared.created > 120000) prepared = null;
         if (r.op === "read") { schema(r, "|op|"); return {state:snapshot()}; }
-        c = current(r.token);
+        if (r.op === "offset" && own(r,"live")) {
+            if (r.live !== true || own(r,"token")) fail("Live offset requests must use the current AE context.");
+            if (own(r,"preview")) bool(r.preview);
+            context = captureContext();
+            c = context.comp;
+            r.token = context.state.token;
+            if (context.state.markerReference) r.preview = true;
+        } else c = current(r.token);
         if (r.op !== "applyPreview") prepared = null;
         if (r.op === "readMarkerGuides") {
             schema(r,"|op||token|");
@@ -380,8 +387,9 @@ var FFCEP = (function () {
         } else if (hasPlan(r.op)) {
             if (typeof r.preview !== "undefined") bool(r.preview);
             if (r.op === "offset" && r.depth && r.preview !== true) fail("Nested offsets require a preview.");
-            plan = corePlan(c, r); report = FFHost.report(plan, null, "ПРОВЕРКА");
+            plan = corePlan(c, r);
             if (r.preview) {
+                report = FFHost.report(plan, null, "ПРОВЕРКА");
                 state = snapshot();
                 if (state.token !== r.token) fail("Композиция изменилась. Обновите панель и повторите действие.");
                 id = session + ":plan:" + (++planSerial);

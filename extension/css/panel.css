@@ -26,3 +26,15 @@ button,input,textarea{font:inherit;color:inherit}button{border:1px solid transpa
 .label-grid button{border:1px solid var(--border);font-size:var(--small);font-variant-numeric:tabular-nums}
 .label-grid button[aria-pressed=true]{border-color:var(--accent)}
 .layer-picker{display:block;width:100%;min-height:30px;margin-top:5px;padding:4px;color:var(--text);font:inherit;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius)}
+
+.inline-plan{flex:none;max-height:min(55%,230px);overflow:auto;overscroll-behavior:contain;padding:5px 8px;background:var(--surface);border-top:1px solid var(--border)}
+.inline-plan-heading{display:flex;align-items:center;flex-wrap:wrap;gap:3px 8px;font-size:var(--small)}
+.inline-plan-heading strong{font-weight:650}
+.inline-plan-heading span{color:var(--muted)}
+.inline-plan-heading .icon-button{margin-left:auto;min-height:24px}
+.inline-plan .plan-actions{display:flex;flex-wrap:wrap;gap:3px;margin:3px 0}
+.inline-plan .plan-actions button{font-size:var(--small);min-height:25px;padding:3px 6px;max-width:100%}
+.inline-plan-notice{margin:3px 0;font-size:var(--small);overflow-wrap:anywhere}
+.inline-plan-notice.error{color:var(--danger)}
+.inline-plan summary{font-size:var(--small);color:var(--muted);cursor:pointer;padding:3px 0}
+.inline-plan details[open]>summary{margin-bottom:5px}
