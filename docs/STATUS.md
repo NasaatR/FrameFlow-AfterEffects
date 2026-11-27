@@ -1,5 +1,9 @@
 # FrameFlow status
 
+## 2.4.7
+
+The reproduced case uses a 24 fps timeline, cursor at frame 141 and After −5. The expected result on a crossing animated layer is that only later keys move five frames earlier. Nested previews, marker-reference timing, key-label options, session timing tools and KBar are covered by the packaged verification suite. After Effects 27.0x78, native Undo/Redo, installed KBar and both OS installers still require a workstation check.
+
 ## 2.4.6
 
 Compared the Time OFFSET 1.4 controls and timing features with FrameFlow. Added separated-axis resolution and capability-based discrete-key handling. New automated cases cover 2D, 3D, overlapping discovery, and key labels. Native AE validation remains pending.

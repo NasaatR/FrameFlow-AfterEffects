@@ -92,6 +92,7 @@ function harness(host,options={}){
   const ctx={document,location:{search:host?'':'?demo=1'},innerWidth:1180,innerHeight:650,URLSearchParams,URL,Blob,console,navigator:{clipboard:{writeText:async()=>{}}},localStorage:{getItem:k=>storage.get(k)??null,setItem:(k,v)=>{metrics.storageWrites++;storage.set(k,v);}},setTimeout,clearTimeout,requestAnimationFrame:fn=>setTimeout(fn,0),ResizeObserver:class{observe(){}},addEventListener(type,fn){(listeners.get(type)||listeners.set(type,[]).get(type)).push(fn);}};
   if(options.clipboard)ctx.navigator.clipboard=options.clipboard;
   if(host)ctx.__adobe_cep__={getSystemPath:()=>'/test/FrameFlow',evalScript(script,cb){if(options.transport)return options.transport(script,cb);const result=vm.runInContext(script,host.ctx);setTimeout(()=>cb(result),0);},getHostEnvironment(){return JSON.stringify({appSkinInfo:{panelBackgroundColor:{color:{red:20,green:20,blue:20}}}});}};
+  if(host&&options.cepEvents)Object.assign(ctx.__adobe_cep__,options.cepEvents);
   ctx.window=ctx;vm.createContext(ctx);for(const file of ['i18n.js','model.js','bridge.js','demo.js','commands.js','ui.js','panel.js']){vm.runInContext(fs.readFileSync(path.join(extension,'js',file),'utf8'),ctx,{filename:file});if(file==='commands.js'&&(options.extraCommands||options.extraGroups)){ctx.__extraCommands=JSON.stringify(options.extraCommands||[]);ctx.__extraGroups=JSON.stringify(options.extraGroups||[]);vm.runInContext('FFCommands=FFCommands.create(FFCommands.groups().concat(JSON.parse(__extraGroups)),FFCommands.all().concat(JSON.parse(__extraCommands)));',ctx);}}
   const $=id=>document.getElementById(id),until=async predicate=>{const deadline=Date.now()+3000;while(!predicate()){if(Date.now()>deadline)throw Error('UI did not reach the expected state: '+$('status').textContent);await new Promise(r=>setTimeout(r,5));}},settle=async()=>{await new Promise(r=>setTimeout(r,0));await until(()=>$('app').getAttribute('aria-busy')!=='true');};
   return {$,document,ctx,storage,copies,metrics,settle,until,dispose(){for(const fn of listeners.get('beforeunload')||[])fn();},focus(){for(const fn of listeners.get('focus')||[])fn();},key(key,extra={}){for(const fn of listeners.get('keydown')||[])fn({key,target:document.body,preventDefault(){},...extra});}};
@@ -115,7 +116,7 @@ test('Report opens and copies synchronously even if the browser clipboard would 
 test('Report falls back to the browser clipboard, and reports a blocked copy honestly',async()=>{for(const fail of [false,true]){let copied='';const h=harness(null,{syncCopy:false,clipboard:{writeText:async value=>{if(fail)throw Error('Denied');copied=value;}}});try{await h.settle();h.$('open-report').click();await h.settle();if(fail){assert.match(h.$('report-copy-state').textContent,/заблокировано/);assert.equal(h.document.activeElement,h.$('report-text'));}else{assert.equal(copied,h.$('report-text').value);assert.match(h.$('report-copy-state').textContent,/Скопировано/);}}finally{h.dispose();}}});
 test('settings save zero, theme and quick steps; appearance reset preserves timing choices',async()=>{const h=harness();try{await h.settle();h.document.querySelector('[data-step="24"]').click();scope(h,'all');mode(h,'keys');h.$('open-settings').focus();h.$('open-settings').click();h.$('pref-spacing').value='0';h.$('pref-spacing').dispatch('input');h.$('dialog-body').querySelectorAll('[data-pref]').find(b=>b.dataset.pref==='theme'&&b.dataset.value==='light').click();assert.equal(h.document.body.classList.contains('light'),true);h.$('quick-step-values').value='3, 7, 15';h.$('quick-step-values').dispatch('input');await new Promise(r=>setTimeout(r,250));const saved=JSON.parse([...h.storage.values()][0]);assert.equal(saved.version,4);assert.equal(saved.spacing,0);assert.deepEqual(saved.quickSteps,[3,7,15]);h.$('reset-appearance').click();h.$('close-dialog').click();assert.equal(h.document.activeElement,h.$('open-settings'));assert.equal(Number(h.$('frames').value),24);assert.equal(h.$('scope').textContent,'Все слои');assert.match(h.$('mode').textContent,/Все ключи/);assert.equal(h.document.querySelectorAll('[data-step]').length,3);}finally{h.dispose();}});
 test('menu keyboard, help and modal focus stay usable',async()=>{const h=harness();try{await h.settle();h.$('mode').focus();h.$('mode').click();assert.equal(h.$('menu').hidden,false);const first=h.document.activeElement;h.key('ArrowDown');assert.notEqual(h.document.activeElement,first);h.key('Escape');assert.equal(h.$('menu').hidden,true);assert.equal(h.document.activeElement,h.$('mode'));h.$('open-help').focus();h.$('open-help').click();assert.match(h.$('dialog-body').textContent,/Авто/);h.key('Escape');assert.equal(h.$('overlay').hidden,true);assert.equal(h.document.activeElement,h.$('open-help'));}finally{h.dispose();}});
-test('cold startup works with scoped evalFile and a detached global namespace',async()=>{const f=require('./host-fixture.cjs').fixture({unloaded:true,detachedGlobal:true}),h=harness(f);try{await h.settle();assert.equal(h.$('connection').textContent,'AE');assert.equal(f.ctx.FrameFlowCEP,undefined);assert.equal(f.ctx.$.global.FrameFlowCEP.version,'2.4.6');h.$('open-report').click();assert.match(h.copies[0],/Загрузчик: ready \/ ядро: 2\.4\.6/);assert.match(h.copies[0],/build 99/);assert.equal(f.writes(),0);}finally{h.dispose();}});
+test('cold startup works with scoped evalFile and a detached global namespace',async()=>{const f=require('./host-fixture.cjs').fixture({unloaded:true,detachedGlobal:true}),h=harness(f);try{await h.settle();assert.equal(h.$('connection').textContent,'AE');assert.equal(f.ctx.FrameFlowCEP,undefined);assert.equal(f.ctx.$.global.FrameFlowCEP.version,'2.4.7');h.$('open-report').click();assert.match(h.copies[0],/Загрузчик: ready \/ ядро: 2\.4\.7/);assert.match(h.copies[0],/build 99/);assert.equal(f.writes(),0);}finally{h.dispose();}});
 test('connection failure stops background retries; explicit Refresh restores the compact controls',async()=>{const f=hostScene();let broken=true,calls=0;const h=harness(f,{transport(script,cb){calls++;if(broken)cb('EvalScript error.');else cb(vm.runInContext(script,f.ctx));}});try{await h.settle();assert.equal(calls,1);assert.equal(h.$('after-plus').disabled,true);h.focus();await new Promise(r=>setTimeout(r,2000));assert.equal(calls,1);h.$('open-report').click();assert.match(h.copies[0],/BOOT_EMPTY/);h.$('close-dialog').click();broken=false;h.$('refresh').click();await h.settle();assert.equal(h.$('connection').textContent,'AE');assert.equal(h.$('after-plus').disabled,false);}finally{h.dispose();}});
 test('invalid frame draft survives losing focus and a metadata refresh',async()=>{const f=hostScene(),h=harness(f);try{await h.settle();h.$('frames').focus();h.$('frames').value='';h.$('frames').dispatch('input');h.$('refresh').focus();h.$('refresh').click();await h.settle();assert.equal(h.$('frames').value,'');assert.equal(h.$('after-plus').disabled,true);h.document.querySelector('[data-step="5"]').click();assert.equal(Number(h.$('frames').value),5);assert.equal(h.$('after-plus').disabled,false);}finally{h.dispose();}});
 
@@ -134,3 +135,87 @@ test('language switch immediately updates main UI, settings, help and report and
 test('English host status, report and blocked reasons contain no own Russian text',async()=>{const f=require('./host-fixture.cjs').fixture();f.comp.items[0].source.duration=6;f.comp.items[1].inPoint=7;const h=harness(f,{fresh:true});try{await h.settle();h.$('after-plus').click();await h.settle();assert.match(h.$('status').textContent,/Done/);h.$('open-report').click();assert.doesNotMatch(h.$('report-text').value,/[А-Яа-яЁё]/);h.$('close-dialog').click();h.$('open-settings').click();h.$('dialog-body').querySelectorAll('[data-pref]').find(b=>b.dataset.pref==='mediaPolicy'&&b.dataset.value==='stop').click();h.$('close-dialog').click();preview(h);await h.settle();assert.match(h.$('dialog-body').textContent,/Writing blocked/);assert.doesNotMatch(h.$('dialog-body').textContent,/[А-Яа-яЁё]/);}finally{h.dispose();}});
 test('Insert and Remove Time route through an explicit interval plan without immediate writes',async()=>{for(const action of ['insert','remove']){const f=hostScene(),h=harness(f,{fresh:true});try{await h.settle();menu(h,'time-menu',action);assert.equal(f.groups(),0);assert.match(h.$('dialog-title').textContent,action==='insert'?/Insert/:/Remove/);h.$('interval-preview').click();await h.settle();assert.equal(f.groups(),0);assert.equal(h.$('apply-preview').disabled,false);assert.match(h.$('dialog-body').textContent,/No layers or keys are deleted/);h.$('apply-preview').click();await h.settle();assert.equal(f.groups(),1);assert.equal(f.comp.items[1].inPoint,action==='insert'?6.5:5.5);}finally{h.dispose();}}});
 
+
+function kbarHarness(options={}){
+  const f=hostScene(), requests=[];
+  const listeners=new Map(),eventName='com.frameflow.ae.panel.kbar';
+  const h=harness(f,{
+    fresh:true,...options,
+    cepEvents:{
+      addEventListener:(name,fn)=>listeners.set(name,fn),
+      removeEventListener:(name,fn)=>{if(listeners.get(name)===fn)listeners.delete(name);}
+    },
+    transport(script,reply){
+      const dispatch=script.match(/^\$\.global\.FrameFlowCEP\.dispatch\("([^"]+)"\)$/);
+      if(dispatch)requests.push(JSON.parse(decodeURIComponent(dispatch[1])).data);
+      const result=vm.runInContext(script,f.ctx);
+      setTimeout(()=>reply(result),0);
+    }
+  });
+  return {...h,f,requests,send:argument=>listeners.get(eventName)({data:argument}),listening:()=>listeners.has(eventName)};
+}
+test('KBar maps all eight case-sensitive arguments to the same offset request and nested preview',async()=>{
+  const h=kbarHarness();
+  try{
+    await h.settle();
+    assert.equal(h.listening(),true);
+    for(const [name,region] of [['Next','after'],['Before','before']]){
+      for(const [sign,direction] of [['Plus',1],['Moins',-1]]){
+        for(const nested of [false,true]){
+          const groups=h.f.groups();
+          await h.send('Offset'+name+sign+(nested?'Comp':''));
+          const req=h.requests.at(-1);
+          assert.equal(req.op,'offset');assert.equal(req.region,region);assert.equal(req.direction,direction);
+          assert.equal(req.depth,nested?1:0);assert.equal(req.preview,nested);assert.equal(req.frames,12);
+          if(nested){assert.equal(h.f.groups(),groups);assert.equal(h.$('overlay').hidden,false);h.key('Escape');}
+        }
+      }
+    }
+    const count=h.requests.length;
+    for(const arg of ['OffsetNextMinus','OffsetNextPlus;123',{},''])await h.send(arg);
+    assert.equal(h.requests.length,count);
+  }finally{h.dispose();}
+  assert.equal(h.listening(),false);
+});
+test('KBar waits for a focus read once and ignores additional events during an edit or open dialog',async()=>{
+  const h=kbarHarness();
+  try{
+    await h.settle();h.focus();
+    await Promise.all([h.send('OffsetNextPlus'),h.send('OffsetNextPlus')]);
+    assert.equal(h.requests.filter(r=>r.op==='offset').length,1);
+    const running=h.send('OffsetNextPlus');await h.send('OffsetBeforeMoins');await running;
+    assert.equal(h.requests.filter(r=>r.op==='offset').length,2);
+    h.$('open-settings').click();await h.send('OffsetNextPlus');
+    assert.equal(h.requests.filter(r=>r.op==='offset').length,2);
+  }finally{h.dispose();}
+});
+test('Shift-click and KBar ? prompt validate a one-shot step, preserve preferences and cancel cleanly',async()=>{
+  const h=kbarHarness();
+  try{
+    await h.settle();
+    h.$('before-minus').dispatch('click',{shiftKey:true});
+    assert.equal(h.document.activeElement,h.$('shift-step'));
+    h.key('Escape');assert.equal(h.requests.filter(r=>r.op==='offset').length,0);
+    await h.send('OffsetNextMoins?');
+    const field=h.$('shift-step');field.value='1/0';field.dispatch('input');
+    assert.equal(field.getAttribute('aria-invalid'),'true');assert.equal(h.$('shift-step-go').disabled,true);
+    field.value='2+3';field.dispatch('input');h.$('shift-step-go').click();await h.settle();
+    const req=h.requests.at(-1);
+    assert.equal(req.frames,5);assert.equal(req.preview,true);assert.equal(req.region,'after');assert.equal(req.direction,-1);
+    assert.equal(h.f.groups(),0);assert.equal(Number(h.$('frames').value),12);
+    h.$('apply-preview').click();await h.settle();assert.equal(h.f.groups(),1);
+    assert.equal(Number(h.$('frames').value),12);
+  }finally{h.dispose();}
+});
+
+test('time tools calculate exact steps and preview the cursor range before writing AE',async()=>{
+  const f=hostScene(),h=harness(f,{fresh:true});try{
+    await h.settle();
+    const field=h.$('frames');field.focus();field.value='(24+6)/2';field.dispatch('input');assert.equal(h.$('after-plus').disabled,true);
+    field.dispatch('keydown',{key:'Enter',preventDefault(){}});assert.equal(Number(field.value),15);assert.equal(h.$('after-plus').disabled,false);
+    menu(h,'time-menu','time-zone');const end=h.$('zone-end');end.value='120';end.dispatch('input');
+    assert.equal(f.comp.workAreaStart,0);h.$('use-zone').click();assert.equal(Number(field.value),24);assert.equal(f.groups(),0);
+    menu(h,'time-menu','time-zone');h.$('apply-zone').click();await h.settle();assert.equal(f.comp.workAreaStart,4);assert.equal(f.comp.workAreaDuration,1);
+    menu(h,'time-menu','measure-time');await h.settle();h.$('use-seam').click();assert.equal(Number(field.value),96);
+  }finally{h.dispose();}
+});

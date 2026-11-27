@@ -1,6 +1,6 @@
 /* FrameFlow CEP host. Data-only RPC; no eval, command IDs, network or file writes. */
 var FFCEP = (function () {
-    var VERSION = "2.4.6", serial = 0, session = String(new Date().getTime()) + "-" + String(Math.random());
+    var VERSION = "2.4.7", serial = 0, session = String(new Date().getTime()) + "-" + String(Math.random());
     var saved = null, recent = [], busy = false, prepared = null, planSerial = 0;
     function fail(message) { throw new Error(message); }
     function own(o, k) { return Object.prototype.hasOwnProperty.call(o, k); }
@@ -147,6 +147,9 @@ var FFCEP = (function () {
         saved.root = root;
         saved.comp = comp;
         saved.signature = signature;
+        state.markerReference = FFMarkerReference.describe(comp,root);
+        FFTimeTools.useProject(root);
+        state.offsetCounter = FFTimeTools.count(comp);
         state.token = saved.token; state.version = VERSION;
         state.environment = {ae:String(app.version), build:String(app.buildNumber), os:String($.os)};
         return {comp:comp, state:state};
@@ -264,19 +267,35 @@ var FFCEP = (function () {
         var command = planHandlers["p:"+r.op];
         if (!command) fail("Unknown plan command.");
         if (!command.allowDirect && r.preview !== true) fail("Command requires a preview before applying.");
-        return command.prepare(c,r);
+        var plan = command.prepare(c,r); plan.entryOp = r.op; return plan;
+    }
+    function keyDeltas(item, change) {
+        var entries = change.snapshot ? [change] : change.properties || [], entry, d, i, j;
+        for (i = 0; i < entries.length; i++) {
+            entry = entries[i];
+            for (j = 0; j < entry.times.length; j++) {
+                d = entry.times[j] - entry.snapshot.keys[j].time;
+                if (Math.abs(d) < item.frameDuration * 0.000001) continue;
+                if (typeof item.minKeyDelta === "undefined" || d < item.minKeyDelta) item.minKeyDelta = d;
+                if (typeof item.maxKeyDelta === "undefined" || d > item.maxKeyDelta) item.maxKeyDelta = d;
+            }
+        }
     }
     function planSummary(plan, id) {
         var r = plan.request, c = plan.context, targets = [], seen = {}, positions = {}, layers = 0, keys = 0, properties = 0, outside = 0, i, change, item;
         if (plan.arrangement) for (i = 0; i < plan.arrangement.slots.length; i++) positions["k"+plan.arrangement.slots[i].id] = i+1;
         for (i = 0; i < plan.changes.length; i++) {
-            change = plan.changes[i]; keys += change.moved || 0;
+            change = plan.changes[i];
+            var owner = change.ownerComp || plan.comp;
+            keys += change.moved || 0;
             if (plan.arrangement && (change.after.inPoint < 0 || change.after.outPoint > c.duration)) outside++;
             if (change.kind === "property") properties++;
             if (change.layer && !seen["k"+change.layer.id]) { seen["k"+change.layer.id] = true; layers++; }
             if (targets.length >= 100) continue;
             item = {layerId:change.layer ? change.layer.id : null,index:change.layer ? change.layer.index : null,
-                kind:change.kind,label:String(change.label).slice(0,500),keys:change.moved || 0,delta:typeof change.delta === "number" ? change.delta : FFCore.offsetSeconds(c,r)};
+                compId:owner.id,compName:owner.name,layerName:change.layer ? change.layer.name : null,
+                frameDuration:owner.frameDuration,displayStart:owner.displayStartTime,kind:change.kind,label:String(change.label).slice(0,500),keys:change.moved || 0,delta:typeof change.delta === "number" ? change.delta : FFCore.offsetSeconds(c,r)};
+            if (r.markerBinding && item.keys) keyDeltas(item,change);
             if (change.kind === "property" && change.path && change.path.length) {
                 var lastStep = change.path[change.path.length-1];
                 if (typeof lastStep.axis === "number") item.axis = lastStep.axis;
@@ -287,11 +306,11 @@ var FFCEP = (function () {
         }
         return {id:id,operation:plan.arrangement ? "arrange" : r.interval ? r.operation : r.operation === "closeGap" ? "gap" : "offset",scope:r.scope,mode:r.mode || "offset",arrangement:plan.arrangement ? {action:plan.arrangement.action,order:plan.arrangement.order,anchor:plan.arrangement.anchor,frames:plan.arrangement.frames,total:plan.arrangement.slots.length} : null,
             region:r.region,direction:r.direction,frames:plan.arrangement ? plan.arrangement.frames : Math.abs(FFCore.offsetSeconds(c,r)/c.frameDuration),
-            delta:plan.arrangement ? 0 : FFCore.offsetSeconds(c,r),cti:r.operation === "closeGap" || r.interval ? r.originalCTI : c.cti,
+            delta:plan.arrangement ? 0 : FFCore.offsetSeconds(c,r),cti:r.operation === "closeGap" || r.interval ? r.originalCTI : r.markerBinding ? plan.comp.time : c.cti,
             frameDuration:c.frameDuration,displayStart:plan.comp.displayStartTime,blocked:plan.errors.length > 0,
             counts:{layers:layers,keys:keys,properties:properties,changes:plan.changes.length,skipped:plan.skips.length,
                 outsideComposition:outside,mediaSkipped:plan.mediaLimits ? plan.mediaLimits.length : 0,errors:plan.errors.length,keptCrossing:plan.keptCrossing ? plan.keptCrossing.length : 0},targets:targets,
-            targetsOmitted:Math.max(0,plan.changes.length-targets.length),skips:plan.skips.slice(0,40),errors:plan.errors.slice(0,20),
+            markerReference:r.markerBinding || null,nestedSources:plan.nestedSources || [],targetsOmitted:Math.max(0,plan.changes.length-targets.length),skips:plan.skips.slice(0,40),errors:plan.errors.slice(0,20),
             skipsOmitted:Math.max(0,plan.skips.length-40),gap:r.operation === "closeGap" ? {start:r.gap.start,end:r.gap.end} : null,
             interval:r.interval || null,keptTargets:plan.keptCrossing ? plan.keptCrossing.slice(0,100) : []};
     }
@@ -301,6 +320,35 @@ var FFCEP = (function () {
         if (r.op === "read") { schema(r, "|op|"); return {state:snapshot()}; }
         c = current(r.token);
         if (r.op !== "applyPreview") prepared = null;
+        if (r.op === "setMarkerReference" || r.op === "clearMarkerReference") {
+            if (r.op === "setMarkerReference") {
+                schema(r, "|op||token||layerId|");
+                FFMarkerReference.set(c,number(r.layerId,1,2147483647,true));
+            } else {
+                schema(r, "|op||token|");
+                FFMarkerReference.clear(c);
+            }
+            return {state:snapshot()};
+        }
+        if (r.op === "labelSelectedKeys") {
+            schema(r, "|op||token||label|"); number(r.label, 0, 16, true);
+            result = FFHost.labelSelectedKeys(c,r);
+            return {state:snapshot(),result:result,failure:result.ok ? null : result,report:stringify(result),message:result.message || (result.error ? result.error.message : "Key labels updated.")};
+        }
+        if (r.op === "measureTime") {
+            schema(r,"|op||token|");
+            return {state:snapshot(),measurement:FFTimeTools.measure(c)};
+        }
+        if (r.op === "resetCounter" || r.op === "setZone") {
+            schema(r,r.op === "setZone" ? "|op||token||baseToken||endFrame|" : "|op||token||baseToken|");
+            if (r.baseToken !== r.token) fail("Composition changed. Reopen this action.");
+            if (r.op === "resetCounter") {
+                FFTimeTools.reset(c);
+                return {state:snapshot()};
+            }
+            result = FFTimeTools.setZone(c,r.endFrame);
+            return {state:snapshot(),result:result,failure:result.ok ? null : result,report:stringify(result)};
+        }
         if (r.op === "select") {
             schema(r, "|op||token||ids|"); layers = targets(c, r.ids, true);
             for (i = 0; i < layers.length; i++) on["k" + layers[i].id] = true;
@@ -318,6 +366,7 @@ var FFCEP = (function () {
             plan = pending.plan; result = FFHost.applyPlan(plan); report = FFHost.report(plan,result,"Применить проверенный план");
         } else if (hasPlan(r.op)) {
             if (typeof r.preview !== "undefined") bool(r.preview);
+            if (r.op === "offset" && r.depth && r.preview !== true) fail("Nested offsets require a preview.");
             plan = corePlan(c, r); report = FFHost.report(plan, null, "ПРОВЕРКА");
             if (r.preview) {
                 state = snapshot();
@@ -333,6 +382,7 @@ var FFCEP = (function () {
             if (typeof r.preview !== "undefined") bool(r.preview);
             result = directEdit(c, layers, r); report = stringify(result);
         } else fail("Неизвестная операция.");
+        FFTimeTools.record(c,plan,result);
         if (!result.ok) return {state:snapshot(), failure:result, report:report, message:(result.error ? result.error.message : plan && plan.errors.length ? plan.errors[0] : "Не удалось завершить проверку записи. Откройте отчёт.") + (plan && plan.errors.length && plan.skips.length ? " " + plan.skips[0] : "")};
         return {state:snapshot(), result:result, report:report, warning:result.mediaSkipped > 0, message:(result.changed ? "Готово · изменений: " + result.changed : "Сцена не изменена") + (plan && plan.request.mode === "offset" && result.changed ? " · ключей сдвинуто: " + result.movedKeys : "") + (result.mediaSkipped ? " · без запаса: " + result.mediaSkipped : result.changed ? "" : " · подходящих целей нет")};
     }

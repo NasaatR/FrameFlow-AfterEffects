@@ -1,9 +1,9 @@
 (function (root) {
   'use strict';
-  const VERSION = '2.4.6';
-  const defaults = {version:4, language:'en', theme:'dark', font:'system', fontSize:12, rowHeight:32, spacing:3, labelWidth:226, radius:6, accent:'#a7c7ff', motion:false, snap:true, autoRefresh:true, poll:1800, frames:12, mode:'offset', scope:'auto', compMarkers:false, mediaPolicy:'skip', rememberContext:false, units:'timecode', showKinds:true, contrast:'normal', quickSteps:[1,2,5,10,12,24,48]};
-  const ranges = {fontSize:[11,16], rowHeight:[30,58], spacing:[0,12], labelWidth:[150,340], radius:[0,12], poll:[1000,5000], frames:[1,1000000]};
-  const choices = {language:['en','ru'],theme:['dark','light','host'],font:['system','sans','mono'],mode:['layers','keys','selectedKeys','offset'],scope:['auto','selected','all'],mediaPolicy:['skip','stop'],units:['timecode','frames'],contrast:['normal','high']};
+  const VERSION = '2.4.7';
+  const defaults = {version:4, language:'en', theme:'dark', font:'system', fontSize:12, rowHeight:32, spacing:3, labelWidth:226, radius:6, accent:'#a7c7ff', motion:false, snap:true, autoRefresh:true, poll:1800, frames:12, mode:'offset', scope:'auto', compMarkers:false, mediaPolicy:'skip', depth:0, labelFilter:'off', labelIds:[], skipLocked:false, skipDisabled:false, skipUnsupported:false, rememberContext:false, units:'timecode', showKinds:true, contrast:'normal', quickSteps:[1,2,5,10,12,24,48]};
+  const ranges = {depth:[-1,1000],fontSize:[11,16], rowHeight:[30,58], spacing:[0,12], labelWidth:[150,340], radius:[0,12], poll:[1000,5000], frames:[1,1000000]};
+  const choices = {labelFilter:['off','protect','only'],language:['en','ru'],theme:['dark','light','host'],font:['system','sans','mono'],mode:['layers','keys','selectedKeys','offset'],scope:['auto','selected','all'],mediaPolicy:['skip','stop'],units:['timecode','frames'],contrast:['normal','high']};
   function luminance(hex) { const channels=[1,3,5].map(n=>parseInt(hex.slice(n,n+2),16)/255).map(v=>v<=.04045?v/12.92:Math.pow((v+.055)/1.055,2.4)); return channels[0]*.2126+channels[1]*.7152+channels[2]*.0722; }
   function contrast(a,b) { const x=luminance(a),y=luminance(b);return (Math.max(x,y)+.05)/(Math.min(x,y)+.05); }
   function accentFor(hex,light) {
@@ -22,6 +22,11 @@
     Object.keys(value).forEach(k => {
       if (!Object.prototype.hasOwnProperty.call(defaults,k)) throw Error('Неизвестный параметр: ' + k);
       const v = value[k];
+      if(k==='labelIds') {
+        if(!Array.isArray(v)||v.length>17||v.some(id=>!Number.isInteger(id)||id<0||id>16)||new Set(v).size!==v.length)throw Error('Метки ключей: выберите уникальные номера от 0 до 16.');
+        out[k]=v.slice().sort((a,b)=>a-b);
+        return;
+      }
       if(k==='quickSteps') { out[k]=parseSteps(v); return; }
       if (k in ranges) { const r = ranges[k]; if (!Number.isInteger(v) || v < r[0] || v > r[1]) throw Error('Значение вне диапазона: ' + k); }
       else if (k in choices) { if (!choices[k].includes(v)) throw Error('Недопустимый вариант: ' + k); }
@@ -34,6 +39,44 @@
     out.version=4; return out;
   }
   function startup(value) {const out=validate(value);if(!out.rememberContext){out.scope='auto';out.mode='offset';}return out;}
+  function parseFrameStep(raw) {
+    const text = String(raw).trim().replace(/−/g, '-');
+    let at = 0;
+    function invalid() { throw Error('Enter a whole result from 1 to 1000000 frames.'); }
+    if (!text || text.length > 96) invalid();
+    function space() { while (at < text.length && /\s/.test(text[at])) at++; }
+    function atom() {
+      space();
+      if (text[at] === '+' || text[at] === '-') { const sign = text[at++]; return (sign === '-' ? -1 : 1) * atom(); }
+      if (text[at] === '(') {
+        at++; const value = sum(); space();
+        if (text[at++] !== ')') invalid(); return value;
+      }
+      const m = text.slice(at).match(/^(?:\d+(?:\.\d*)?|\.\d+)/);
+      if (!m) invalid();
+      at += m[0].length;
+      const value = Number(m[0]); if (value > Number.MAX_SAFE_INTEGER) invalid(); return value;
+    }
+    function product() {
+      let value = atom(); space();
+      while (text[at] === '*' || text[at] === '/') {
+        const op = text[at++], other = atom(); value = op === '*' ? value * other : value / other;
+        if (!Number.isFinite(value) || Math.abs(value)>Number.MAX_SAFE_INTEGER) invalid(); space();
+      }
+      return value;
+    }
+    function sum() {
+      let value = product(); space();
+      while (text[at] === '+' || text[at] === '-') {
+        const op = text[at++], other = product(); value = op === '+' ? value + other : value - other;
+        if (!Number.isFinite(value) || Math.abs(value)>Number.MAX_SAFE_INTEGER) invalid(); space();
+      }
+      return value;
+    }
+    const value = sum(), rounded = Math.round(value);
+    if (at !== text.length || Math.abs(value-rounded) > Number.EPSILON * Math.max(1,Math.abs(value)) * 2 || rounded < 1 || rounded > 1000000) invalid();
+    return rounded;
+  }
   function parseSteps(value) {
     const list=Array.isArray(value)?value:String(value).trim().split(/[,;\s]+/).map(Number);
     if(!list.length||list.length>8||list.some(n=>!Number.isInteger(n)||n<1||n>1000000))throw Error('Быстрые шаги: от 1 до 8 целых чисел, каждое от 1 до 1000000.');
@@ -89,7 +132,7 @@
     else if(l.sourceDuration!==null&&!l.still) {lower=Math.max(lower,Math.min(l.inPoint,l.start));upper=Math.min(upper,Math.max(l.outPoint,l.start+l.sourceDuration*l.stretch/100));}
     return Math.max(lower,Math.min(upper,value));
   }
-  const api={VERSION,contrast,accentFor,defaults,ranges,choices,validate,startup,storage,parseSteps,effectiveScope,selected,frame,timecode,parseTime,snapDelta,trimLimit};
+  const api={VERSION,contrast,accentFor,defaults,ranges,choices,validate,startup,storage,parseFrameStep,parseSteps,effectiveScope,selected,frame,timecode,parseTime,snapDelta,trimLimit};
   if(typeof module==='object'&&module.exports) module.exports=api; else root.FFModel=api;
 }(typeof window==='object'?window:this));
 

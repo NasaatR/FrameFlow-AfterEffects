@@ -20,3 +20,9 @@ button,input,textarea{font:inherit;color:inherit}button{border:1px solid transpa
 
 /* New registered commands share the existing action strip and button tokens. */
 .command-actions{display:flex;flex-wrap:wrap;gap:4px;min-width:0}.command-actions>button{font-size:var(--small);min-height:29px}.command-menus{display:contents}
+
+.offset-context{display:block;max-width:100%;margin:-3px 0 5px;padding:3px 5px;min-height:22px;font-size:var(--tiny);color:var(--accent);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.label-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(42px,1fr));gap:4px;margin:8px 0}
+.label-grid button{border:1px solid var(--border);font-size:var(--small);font-variant-numeric:tabular-nums}
+.label-grid button[aria-pressed=true]{border-color:var(--accent)}
+.layer-picker{display:block;width:100%;min-height:30px;margin-top:5px;padding:4px;color:var(--text);font:inherit;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius)}

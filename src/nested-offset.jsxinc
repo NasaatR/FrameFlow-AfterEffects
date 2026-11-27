@@ -1,0 +1,121 @@
+/* Nested source time is local to the precomp; its display start is a UI offset. */
+var FFNestedOffset = (function () {
+    function copyRequest(request) {
+        var copy = {}, name;
+        for (name in request) if (Object.prototype.hasOwnProperty.call(request,name)) copy[name] = request[name];
+        return copy;
+    }
+    function blocked(text) { throw new Error(text); }
+    function node(comp, time, delta, depth, layers) {
+        return {comp:comp,context:{comp:comp,cti:time,duration:comp.duration,frameDuration:comp.frameDuration},
+            delta:delta,depth:depth,layers:layers,instances:{},references:{},signature:[]};
+    }
+    function checkProtected(comp,time,delta,region) {
+        var p = comp.markerProperty, i, marker, start, end;
+        if (!p) return;
+        for (i = 1; i <= p.numKeys; i++) {
+            marker = p.keyValue(i);
+            if (!marker.protectedRegion) continue;
+            start = p.keyTime(i); end = start+marker.duration;
+            if (region === "after" ? end >= Math.min(time,time+delta) : start <= Math.max(time,time+delta))
+                blocked("Nested source contains a Protected Region on the affected side: "+comp.name);
+        }
+    }
+    function graph(root,request) {
+        var first = node(root,root.time,FFCore.offsetSeconds({frameDuration:root.frameDuration},request),0,
+            FFHost.selectedLayers(root,request.scope,request.layerIds));
+        var nodes = [first], byId = {}, parents = {}, inspected = 0, i, j, k, n, layer, source, child, ratio, time, delta, key, uses, parent, refs, l, ids;
+        byId["c"+root.id] = first;
+        for (i = 0; i < nodes.length; i++) {
+            n = nodes[i]; n.signature.push(n.comp.id,n.comp.duration,n.comp.frameDuration,n.context.cti,n.delta);
+            if (n.depth) checkProtected(n.comp,n.context.cti,n.delta,request.region);
+            for (j = 0; j < n.layers.length; j++) {
+                layer = n.layers[j]; source = layer.source;
+                if (++inspected > 20000) blocked("Nested offset exceeds 20000 layers. Reduce scope or depth.");
+                n.signature.push(layer.id,layer.inPoint,layer.outPoint,layer.startTime,layer.stretch,layer.locked,layer.enabled,
+                    layer.timeRemapEnabled,source instanceof CompItem ? source.id : 0);
+                if (n.depth === request.depth || !(source instanceof CompItem) ||
+                    !(layer.inPoint < n.context.cti && layer.outPoint > n.context.cti)) continue;
+                if (layer.locked && request.skipLocked || layer.enabled === false && request.skipDisabled) continue;
+                if (layer.locked) blocked("Nested precomp layer is locked: "+layer.name);
+                if (layer.timeRemapEnabled || source.useProxy || typeof layer.stretch !== "number" || !isFinite(layer.stretch) || layer.stretch <= 0)
+                    blocked("Nested offset needs a positive Stretch and an unremapped, original precomp source: "+layer.name);
+                ratio = 100/layer.stretch; time = (n.context.cti-layer.startTime)*ratio; delta = n.delta*ratio;
+                if (!isFinite(time) || !isFinite(delta) || Math.abs(delta) > 10800)
+                    blocked("Invalid nested time mapping: "+layer.name);
+                key = "c"+source.id; child = byId[key];
+                if (child) {
+                    if (child.depth === 0 || Math.abs(child.context.cti-time) > source.frameDuration*0.000001 ||
+                        Math.abs(child.delta-delta) > source.frameDuration*0.000001 ||
+                        (request.depth !== -1 && child.depth !== n.depth+1))
+                        blocked("Shared precomp instances need identical source timing and depth: "+source.name);
+                } else {
+                    if (source.numLayers > 2000) blocked("Nested source exceeds 2000 layers: "+source.name);
+                    child = node(source,time,delta,n.depth+1,FFHost.selectedLayers(source,"all"));
+                    byId[key] = child; nodes.push(child);
+                }
+                n.instances["l"+layer.id] = true;
+                child.references["c"+n.comp.id+"l"+layer.id] = true;
+            }
+        }
+        /* usedIn lists parent comps, not individual instances. Index every instance of each parent once. */
+        for (i = 1; i < nodes.length; i++) {
+            n = nodes[i]; uses = n.comp.usedIn;
+            if (!uses || !uses.length) blocked("Cannot verify all uses of nested source: "+n.comp.name);
+            for (j = 0; j < uses.length; j++) {
+                parent = uses[j]; key = "c"+parent.id; refs = parents[key];
+                if (!refs) {
+                    refs = {}; parents[key] = refs;
+                    for (k = 1; k <= parent.numLayers; k++) {
+                        if (++inspected > 40000) blocked("Nested usage scan exceeds the layer limit. Reduce scope or depth.");
+                        l = parent.layer(k); source = l.source;
+                        if (!(source instanceof CompItem)) continue;
+                        ids = refs["c"+source.id]; if (!ids) { ids = []; refs["c"+source.id] = ids; }
+                        ids.push(l.id);
+                    }
+                }
+                ids = refs["c"+n.comp.id];
+                if (!ids || !ids.length) blocked("Nested source usage changed. Preview again.");
+                for (k = 0; k < ids.length; k++) if (!n.references[key+"l"+ids[k]])
+                    blocked("Nested source is also used outside this offset: "+n.comp.name+" ("+parent.name+").");
+            }
+        }
+        return nodes;
+    }
+    function prepare(comp,request) {
+        var nodes, root, i, j, k, n, local, part, change, total = 0, prefix;
+        if (request.markerTimes) blocked("Clear the marker reference or use root-only depth for marker offsets.");
+        nodes = graph(comp,request);
+        for (i = 0; i < nodes.length; i++) {
+            n = nodes[i]; local = copyRequest(request); local.nestedInstances = n.instances;
+            if (i) { local.scope = "all"; delete local.layerIds; local.deltaSeconds = n.delta; }
+            part = FFHost.prepare(local,n.context);
+            for (j = 0; j < part.changes.length; j++) {
+                change = part.changes[j]; change.ownerComp = n.comp; change.delta = n.delta;
+                if (i) change.label = n.comp.name+" / "+change.label;
+                if (change.snapshot) total += change.snapshot.keys.length;
+                if (change.properties) for (k = 0; k < change.properties.length; k++) total += change.properties[k].snapshot.keys.length;
+            }
+            if (total > 50000) blocked("Nested offset exceeds 50000 captured keys. Reduce scope or depth.");
+            if (!i) { root = part; root.nestedSources = []; continue; }
+            prefix = n.comp.name+" / ";
+            root.nestedSources.push({name:n.comp.name,id:n.comp.id,depth:n.depth});
+            root.changes = root.changes.concat(part.changes);
+            for (j = 0; j < part.errors.length; j++) root.errors.push(prefix+part.errors[j]);
+            for (j = 0; j < part.skips.length; j++) root.skips.push(prefix+part.skips[j]);
+            root.mediaLimits = root.mediaLimits.concat(part.mediaLimits);
+            root.policySkipped = (root.policySkipped || 0)+(part.policySkipped || 0);
+            root.offsetSpans = (root.offsetSpans || []).concat(part.offsetSpans || []);
+            root.layerCount += part.layerCount;
+        }
+        root.nestedGraph = nodes;
+        return root;
+    }
+    function validate(plan) {
+        var now = graph(plan.comp,plan.request), old = plan.nestedGraph, i;
+        if (now.length !== old.length) blocked("Nested precomp graph changed. Preview again.");
+        for (i = 0; i < now.length; i++) if (now[i].comp !== old[i].comp ||
+            now[i].signature.join("|") !== old[i].signature.join("|")) blocked("Nested precomp timing or scope changed. Preview again.");
+    }
+    return {prepare:prepare,validate:validate};
+}());

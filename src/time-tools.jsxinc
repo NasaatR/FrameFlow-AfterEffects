@@ -1,0 +1,79 @@
+/* Session statistics and read-only measurement use the active composition's time base. */
+var FFTimeTools = (function () {
+    var projectRoot = null, counters = {};
+    function useProject(root) {
+        try { if (projectRoot && isValid(projectRoot) && projectRoot === root) return; }
+        catch (invalidReference) { /* Previous project was closed or reloaded. */ }
+        counters = {};
+        projectRoot = root;
+    }
+    function count(c) { return counters["c" + c.id] || 0; }
+    function reset(c) { delete counters["c" + c.id]; }
+    function record(c, plan, result) {
+        if (!plan || !result.ok || !result.changed || result.partial || plan.entryOp !== "offset") return;
+        counters["c" + c.id] = count(c) + plan.request.frames * plan.request.direction;
+    }
+    function measure(c) {
+        var layers = c.selectedLayers, lo = Infinity, hi = -Infinity, keys = 0, inspected = 0, i, j, k, p, props, selected, time;
+        for (i = 0; i < layers.length; i++) {
+            props = layers[i].selectedProperties;
+            for (j = 0; j < props.length; j++) {
+                p = props[j];
+                if (p.propertyType !== PropertyType.PROPERTY || !p.numKeys) continue;
+                selected = p.selectedKeys;
+                if (!selected) continue;
+                inspected += selected.length;
+                if (inspected > 50000) throw new Error("Select fewer than 50001 keys to measure.");
+                for (k = 0; k < selected.length; k++) {
+                    time = p.keyTime(selected[k]);
+                    lo = Math.min(lo, time); hi = Math.max(hi, time); keys++;
+                }
+            }
+        }
+        var kind = "keys", seam = null;
+        if (keys === 1) { lo = Math.min(lo, c.time); hi = Math.max(hi, c.time); kind = "cursorKey"; }
+        if (!keys) {
+            if (!layers.length) throw new Error("Select keys or layers to measure.");
+            for (i = 0; i < layers.length; i++) {
+                lo = Math.min(lo, layers[i].inPoint, layers[i].outPoint);
+                hi = Math.max(hi, layers[i].inPoint, layers[i].outPoint);
+            }
+            if (layers.length === 2) {
+                var a = layers[0], b = layers[1];
+                var start = Math.max(Math.min(a.inPoint,a.outPoint),Math.min(b.inPoint,b.outPoint));
+                var end = Math.min(Math.max(a.inPoint,a.outPoint),Math.max(b.inPoint,b.outPoint));
+                seam = {kind:start > end ? "gap" : "overlap",frames:Math.abs(start-end)/c.frameDuration};
+            }
+            kind = "layers";
+        }
+        return {start:lo,end:hi,frames:(hi-lo)/c.frameDuration,kind:kind,seam:seam};
+    }
+    function setZone(c, endFrame) {
+        var fd = c.frameDuration, end = endFrame * fd, eps = fd * 0.000001;
+        if (typeof endFrame !== "number" || !isFinite(endFrame) || Math.floor(endFrame) !== endFrame || end < 0 || end > c.duration+eps) throw new Error("Choose a frame inside the composition.");
+        var start = Math.min(c.time,end), duration = Math.abs(c.time-end);
+        if (duration < fd-eps) throw new Error("Choose a range of at least one frame.");
+        var before = {start:c.workAreaStart,duration:c.workAreaDuration}, opened = false;
+        var result = {ok:true,changed:0,recoveryErrors:[]};
+        function set(a,b) {
+            /* Set duration first when moving right to avoid overshooting the comp end. */
+            if (a > c.workAreaStart && c.workAreaDuration > b) c.workAreaDuration = b;
+            if (Math.abs(a-c.workAreaStart) > eps) c.workAreaStart = a;
+            if (Math.abs(b-c.workAreaDuration) > eps) c.workAreaDuration = b;
+            if (Math.abs(c.workAreaStart-a) > eps || Math.abs(c.workAreaDuration-b) > eps) throw new Error("Work area readback differs from the requested interval.");
+        }
+        if (Math.abs(before.start-start) <= eps && Math.abs(before.duration-duration) <= eps) return result;
+        try {
+            app.beginUndoGroup("FrameFlow - Set work area"); opened = true;
+            set(start,duration); result.changed = 1;
+        } catch (e) {
+            result.ok = false; result.error = FFHost.errorInfo(e);
+            if (opened) try { set(before.start,before.duration); } catch (recovery) { result.recoveryErrors.push(FFHost.errorInfo(recovery).message); }
+            result.restored = !result.recoveryErrors.length;
+        } finally {
+            if (opened) try { app.endUndoGroup(); } catch (cleanup) { result.ok = false; result.cleanupError = FFHost.errorInfo(cleanup); }
+        }
+        return result;
+    }
+    return {useProject:useProject,count:count,reset:reset,record:record,measure:measure,setZone:setZone};
+}());

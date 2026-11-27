@@ -1,0 +1,105 @@
+/* Session-only marker references. The scene is never modified by set/clear. */
+var FFMarkerReference = (function () {
+    var root = null, bindings = {};
+    function projectBindings(currentRoot) {
+        var same = false;
+        if (typeof currentRoot === "undefined") currentRoot = app.project.rootFolder;
+        try { same = root && isValid(root) && root === currentRoot; } catch (invalidReference) { same = false; }
+        if (!same) {
+            root = currentRoot; bindings = {};
+        }
+        return bindings;
+    }
+    function findLayer(comp,id) {
+        var i, layer;
+        for (i = 1; i <= comp.numLayers; i++) {
+            layer = comp.layer(i);
+            if (layer.id === id) return layer;
+        }
+        return null;
+    }
+    function markers(layer) { return layer ? layer.property("ADBE Marker") : null; }
+    function times(prop) {
+        var result = [], i, t;
+        if (!prop || !prop.numKeys) throw new Error("The reference layer has no markers. Choose a marked layer or clear the reference.");
+        if (prop.numKeys > 50000) throw new Error("The reference layer exceeds the 50000-marker limit.");
+        for (i = 1; i <= prop.numKeys; i++) {
+            t = prop.keyTime(i);
+            if (typeof t !== "number" || !isFinite(t) || i > 1 && result[i-2] >= t) throw new Error("Invalid reference marker times.");
+            result.push(t);
+        }
+        return result;
+    }
+    function set(comp,id) {
+        var store = projectBindings(), layer = findLayer(comp,id);
+        if (!layer) throw new Error("Reference layer no longer exists.");
+        times(markers(layer));
+        store["c"+comp.id] = {layerId:id,name:String(layer.name)};
+    }
+    function clear(comp) { var store = projectBindings(); delete store["c"+comp.id]; }
+    function describe(comp,currentRoot) {
+        var binding = projectBindings(currentRoot)["c"+comp.id], layer, prop;
+        if (!binding) return null;
+        layer = findLayer(comp,binding.layerId); prop = markers(layer);
+        return {layerId:binding.layerId,name:layer ? String(layer.name) : binding.name,count:prop ? prop.numKeys : 0};
+    }
+    function attach(comp,request,preview) {
+        var binding = projectBindings()["c"+comp.id], layer;
+        if (!binding) return;
+        if (preview !== true) throw new Error("A marker reference is active. Preview the offset first.");
+        layer = findLayer(comp,binding.layerId);
+        if (!layer) throw new Error("Reference layer no longer exists. Clear or replace the reference.");
+        request.originalCTI = comp.time;
+        request.markerLayerId = layer.id;
+        request.markerTimes = times(markers(layer));
+        request.markerBinding = {layerId:layer.id,name:String(layer.name),count:request.markerTimes.length};
+    }
+    function validate(comp,request) {
+        var binding = projectBindings()["c"+comp.id], p, i;
+        if (!binding || binding.layerId !== request.markerLayerId) throw new Error("Marker reference changed. Preview again.");
+        p = markers(findLayer(comp,binding.layerId));
+        if (!p || p.numKeys !== request.markerTimes.length) throw new Error("Reference markers changed. Preview again.");
+        for (i = 0; i < request.markerTimes.length; i++) if (p.keyTime(i+1) !== request.markerTimes[i]) throw new Error("Reference markers moved. Preview again.");
+    }
+    /* Lower/upper bound in sorted composition-time seconds, including subframes. */
+    function boundary(sorted,time,includeEqual) {
+        var lo = 0, hi = sorted.length, mid;
+        while (lo < hi) {
+            mid = Math.floor((lo+hi)/2);
+            if (sorted[mid] < time || includeEqual && sorted[mid] === time) lo = mid+1;
+            else hi = mid;
+        }
+        return lo;
+    }
+    function steps(request,time,outPoint) {
+        var a = request.markerTimes, n = boundary(a,time,!outPoint);
+        return request.region === "after" ? n : a.length-n;
+    }
+    function crosses(request,lo,hi,inclusiveEnd) {
+        var a = request.markerTimes, i = boundary(a,lo,true);
+        return i < a.length && (inclusiveEnd ? a[i] <= hi : a[i] < hi);
+    }
+    function layerPlan(model,context,request,layersOnly) {
+        var d = FFCore.offsetSeconds(context,request), a = steps(request,model.inPoint,false)*d;
+        var b = layersOnly ? a : steps(request,model.outPoint,true)*d;
+        var whole = a === b, start = model.start+(whole ? a : 0), ip = model.inPoint+a, op = model.outPoint+b;
+        if (!a && !b) return {kind:"none"};
+        if (model.locked) return {skip:"Locked layer"};
+        if (op-ip < context.frameDuration*0.000001) return {skip:"Marker offsets would collapse or reverse the layer."};
+        if (Math.abs(ip)>10800 || Math.abs(op)>10800 || Math.abs(start)>10800) return {skip:"Marker offsets exceed AE time limits."};
+        return {kind:whole ? "layer" : "edge",delta:whole ? a : request.region === "after" ? b : a,
+            start:start,inPoint:ip,outPoint:op};
+    }
+    function spansKeys(props,request,layer) {
+        var i, p, first = Infinity, last = -Infinity, a = request.markerTimes, pos;
+        for (i = 0; i < props.length; i++) {
+            p = props[i];
+            if (!p.numKeys || p.isSeparationLeader && p.dimensionsSeparated) continue;
+            first = Math.min(first,p.keyTime(1)); last = Math.max(last,p.keyTime(p.numKeys));
+        }
+        pos = boundary(a,Math.max(first,layer.inPoint),true);
+        return pos < a.length && a[pos] <= last && a[pos] < layer.outPoint;
+    }
+    return {set:set,clear:clear,describe:describe,attach:attach,validate:validate,steps:steps,crosses:crosses,
+        layerPlan:layerPlan,spansKeys:spansKeys};
+}());

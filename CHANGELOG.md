@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.4.7
+
+- Add direction-aware offsets inside nested compositions with depth control and a required preview. Show composition and layer names in the plan.
+- Add key-label protection, an inverse label filter, selected-key labeling and explicit policies for locked layers, disabled layers and unsupported properties.
+- Add offsets from a layer’s markers, a signed session frame counter, distance measurement and a frame-step calculator. Expose the four directions and their nested variants to KBar.
+- Reject offset trims that would cut a protected region in a precomposition source. Recheck the region immediately before applying a captured plan.
+
 ## 2.4.6
 
 - Resolve separated Position axes through their leader, show the affected axis in previews, and traverse overlapping property groups once per scan.

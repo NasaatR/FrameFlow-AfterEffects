@@ -41,9 +41,9 @@
     const scopeNote=prefs.scope==='auto'?t('Selected AE layers, or all layers if none are selected.','Выделенные в AE слои; без выделения — все слои.'):prefs.scope==='all'?t('All composition layers.','Все слои композиции.'):selected?t('Selected AE layers.','Выделенные в AE слои.'):t('No selected layers. Select them in AE or choose Auto.','Нет выделенных слоёв. Выделите их в AE или выберите Авто.');
     U.html($('scope'),esc(scopeNames()[prefs.scope])+icons('chevron'));$('scope').title=scopeNote;$('scope').setAttribute('aria-label',t('Scope: ','Область: ')+scopeNames()[prefs.scope]);$('scope').disabled=busy;
     U.html($('mode'),esc(modeNames()[prefs.mode])+icons('chevron'));$('mode').disabled=busy;$('mode').title=modeNotes()[prefs.mode];$('mode').setAttribute('aria-label',t('Move: ','Переносить: ')+modeNames()[prefs.mode]);
-    shiftCommands.forEach(c=>{const b=$(c.id);b.disabled=!available(c,eligibility);U.text(b.querySelector('.step-value'),prefs.frames);b.title=commandLabel(c)+' · '+(c.args.direction<0?t('Move earlier','Сдвинуть раньше'):t('Move later','Сдвинуть позже'));b.setAttribute('aria-label',b.title);});
+    shiftCommands.forEach(c=>{const b=$(c.id);b.disabled=!available(c,eligibility);U.text(b.querySelector('.step-value'),prefs.frames);b.title=commandLabel(c)+' · '+(c.args.direction<0?t('Move earlier','Сдвинуть раньше'):t('Move later','Сдвинуть позже'))+t(' · Shift-click for a one-time step',' · Shift + щелчок для разового шага');b.setAttribute('aria-label',b.title);});
     toolbarCommands.forEach(c=>{const b=$(c.id);b.disabled=!available(c,eligibility);U.label(b,C.title(c,prefs.language));b.title=commandLabel(c);});
-    commandGroups.forEach(g=>{const b=$(g.element);b.disabled=!groupedCommands.get(g.id).some(c=>available(c,eligibility));U.label(b,C.title(g,prefs.language));});
+    commandGroups.forEach(g=>{const b=$(g.element);b.disabled=g.id==='time'?!r:!groupedCommands.get(g.id).some(c=>available(c,eligibility));U.label(b,C.title(g,prefs.language));});
     $('preview-plan').disabled=!previewCommands.some(c=>available(c,eligibility));$('refresh').disabled=busy;
     if($('arrange-preview'))$('arrange-preview').disabled=busy||!!($('arrange-frames')&&$('arrange-frames').getAttribute('aria-invalid')==='true');
     if($('apply-preview'))$('apply-preview').disabled=!r||isDemo||!activePreview||activePreview.blocked||activePreview.counts.changes===0;
@@ -51,15 +51,23 @@
     $('half-second').disabled=!state||busy;$('one-second').disabled=!state||busy;
     const live=!connectionFailed&&(!!state||bridge&&bridge.connected);$('connection').textContent=isDemo?t('Demo','Демо'):connectionFailed?t('Offline','Сбой связи'):live?'AE':t('No AE','Нет AE');$('connection').className='connection '+(isDemo?'demo':live?'live':'');
     U.text($('comp-name'),state?state.name:t('No composition','Нет композиции'));$('comp-name').title=state?state.name+' · '+Number((1/state.frameDuration).toFixed(3))+' fps':'';
+    const options=offsetContext();
+    $('offset-context').hidden=!options.length;
+    U.text($('offset-context'),options.join(' · '));
+    $('offset-context').title=t('Offset options','Параметры сдвига');
+    $('offset-context').disabled=busy;
     $('empty-text').hidden=!!state;$('status').textContent=D(statusRaw);$('status').title=D(statusRaw);
   }
-  async function request(data,quiet=false){
+  async function request(data,quiet=false,expectedComp=null){
     if(disposed||busy)return null;
     if(data.op!=='read'&&!ready()){status(t('Click Refresh to connect to AE.','Нажмите «Обновить» для подключения к AE.'),true);return null;}
     const previewRevision=dialogRevision;closeMenu();busy=true;clearTimeout(pollTimer);render();if(!quiet)status(data.op==='read'?t('Reading AE…','Читаем AE…'):t('Checking AE…','Проверяем AE…'));
     let readCompleted=false;
     try{
       const fresh=await bridge.call({op:'read'});if(disposed)return null;accept(fresh.state);readCompleted=true;connectionFailed=false;readFailures=0;
+      if(expectedComp!==null&&state.compId!==expectedComp)throw Error(t('Composition changed. Reopen this action in the intended composition.','Композиция сменилась. Откройте действие заново в нужной композиции.'));
+      // A reference can change in AE after the last panel refresh.
+      if(data.op==='offset'&&state.markerReference)data.preview=true;
       const result=data.op==='read'?fresh:await bridge.call(Object.assign({},data,{token:state.token}));if(disposed)return null;
       if(result.state)accept(result.state);if(result.report)lastReport=result.report;
       if(result.failure){
@@ -73,14 +81,98 @@
     }catch(cause){if(disposed)return null;const e=cause&&cause.message?cause:new Error(typeof cause==='string'&&cause!=='undefined'?cause:t('AE returned no error description.','AE не передал описание ошибки.'));connectionFailed=!!(bridge.needsReconnect||bridge.uncertain);if(!readCompleted){readFailures++;state=null;}$('empty-text').textContent=D(e.message);status(e.message,true);log(data.op,(e.code?e.code+' / '+e.stage+' · ':'')+e.message);lastReport=D(e.message)+(e.code?'\nCode: '+e.code+'\nStage: '+e.stage+'\nRequest: '+data.op:'')+(e.host?'\n'+JSON.stringify(e.host,null,2):'');return null;}
     finally{busy=false;render();schedulePoll();}
   }
-  function refresh(quiet=false){if(quiet&&connectionFailed)return Promise.resolve(null);return request({op:'read'},quiet);}
+  let activeRefresh=null;
+  function refresh(quiet=false){
+    if(quiet&&connectionFailed)return Promise.resolve(null);
+    if(busy)return activeRefresh||Promise.resolve(null);
+    const reading=request({op:'read'},quiet);
+    activeRefresh=reading;
+    reading.finally(()=>{if(activeRefresh===reading)activeRefresh=null;});
+    return reading;
+  }
   function available(c,s){s=s||{ready:ready(),any:!!state&&(prefs.scope!=='selected'?state.layers.length>0:M.selected(state).length>0),valid:validFrames()};return s.ready&&s.any&&(!c.context.includes('frames')||s.valid);}
   function commandLabel(c){return c.surface==='shift'?directionLabel(c.args.region,c.args.direction):C.title(c,prefs.language);}
-  function runCommand(id,preview){const c=C.get(id);if(!available(c))return null;if(c.form==='interval')return showInterval(c.args.action,id);if(c.form==='arrange')return showArrange(c.args.action,id);return request(C.build(id,prefs,{},preview));}
+  function runCommand(id,preview,overrides={}){
+    const c=C.get(id);
+    if(!available(c))return null;
+    if(c.form==='interval')return showInterval(c.args.action,id);
+    if(c.form==='arrange')return showArrange(c.args.action,id);
+    const context=Object.assign({},prefs,overrides), payload=C.build(id,context,{},preview);
+    if(c.op==='offset'){
+      for(const key of ['depth','labelFilter','labelIds','skipLocked','skipDisabled','skipUnsupported'])payload[key]=context[key];
+      if(context.depth!==0||state.markerReference)payload.preview=true;
+      if(context.labelFilter!=='off'&&!context.labelIds.length){showOffsetOptions();return null;}
+    }
+    return request(payload);
+  }
+  function promptShift(command,depth){
+    const side=command.args.region==='before'?t('Before cursor','До курсора'):t('After cursor','После курсора');
+    const direction=command.args.direction<0?t('earlier','раньше'):t('later','позже');
+    openDialog(side+' · '+direction,'<label class="setting-row" for="shift-step"><span>'+t('Frames for this shift','Кадры для этого сдвига')+'</span><input class="arrange-number" id="shift-step" type="text" value="'+prefs.frames+'" aria-describedby="shift-step-error"></label><p class="settings-status" id="shift-step-error" role="status"></p><div class="operation-actions"><button class="primary-button" id="shift-step-go">'+t('Preview Changes','Показать план')+'</button></div>');
+    const field=$('shift-step'),button=$('shift-step-go'),feedback=$('shift-step-error');
+    function getStep(){
+      try{
+        const frames=M.parseFrameStep(field.value);
+        field.setAttribute('aria-invalid','false');feedback.textContent='';button.disabled=false;
+        return frames;
+      }catch(error){
+        field.setAttribute('aria-invalid','true');feedback.textContent=D(error.message);button.disabled=true;
+        return null;
+      }
+    }
+    field.oninput=getStep;
+    button.onclick=safe(()=>{
+      const frames=getStep();
+      if(frames===null)return;
+      return runCommand(command.id,true,{frames,depth});
+    });
+    field.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();button.click();}};
+    field.focus();field.select();
+  }
+  function listenKBar(){
+    const cep=window.__adobe_cep__,eventName='com.frameflow.ae.panel.kbar';
+    if(!cep||typeof cep.addEventListener!=='function')return;
+    let waiting=false;
+    const receive=safe(async event=>{
+      if(disposed||isDemo||!event||!event.data)return;
+      const match=typeof event.data==='string'&&/^Offset(Next|Before)(Plus|Moins)(Comp)?(\?)?$/.exec(event.data.trim());
+      if(!match){status(t('Unknown FrameFlow KBar argument.','Неизвестный аргумент KBar для FrameFlow.'),true);return;}
+      if(waiting)return;
+      if(busy&&activeRefresh&&state){
+        // Opening an already-loaded CEP panel can trigger a focus refresh.
+        // Only wait for a read. Never queue a command behind an edit.
+        const compId=state.compId;
+        waiting=true;
+        try{
+          const fresh=await activeRefresh;
+          if(!fresh||disposed||!state||state.compId!==compId)return;
+        }finally{waiting=false;}
+      }
+      if(!$('overlay').hidden||!ready()){
+        status(t('Close the dialog and wait for FrameFlow to sync, then press the KBar button.','Закройте диалог и дождитесь связи с AE, затем нажмите кнопку KBar.'),true);
+        return;
+      }
+      const command=C.get((match[1]==='Next'?'after':'before')+(match[2]==='Plus'?'-plus':'-minus'));
+      if(!available(command)){status(t('Check the frame step and layer scope.','Проверьте шаг и область слоёв.'),true);return;}
+      const depth=match[3]?(prefs.depth||1):0;
+      if(match[4])return promptShift(command,depth);
+      return runCommand(command.id,depth!==0,{depth});
+    });
+    cep.addEventListener(eventName,receive);
+    window.addEventListener('beforeunload',()=>{if(typeof cep.removeEventListener==='function')cep.removeEventListener(eventName,receive);});
+  }
   function setupCommandSurfaces(){
     toolbarCommands.forEach(c=>{const b=U.actionButton({id:c.id,text:C.title(c,prefs.language),symbol:c.icon,onClick:safe(()=>runCommand(c.id))});b.setAttribute('data-command',c.id);$('command-actions').append(b);});
-    commandGroups.forEach(g=>$('command-menus').append(U.actionButton({id:g.element,text:C.title(g,prefs.language),variant:'quiet',menu:true,onClick:()=>openMenu($(g.element),groupedCommands.get(g.id).map(c=>({id:c.choice||c.id,label:commandLabel(c),disabled:!available(c),onClick:()=>runCommand(c.id)})))})));
-    shiftCommands.forEach(c=>{$(c.id).setAttribute('data-command',c.id);$(c.id).onclick=safe(()=>runCommand(c.id));});
+    commandGroups.forEach(g=>$('command-menus').append(U.actionButton({id:g.element,text:C.title(g,prefs.language),variant:'quiet',menu:true,onClick:()=>openMenu($(g.element),menuItems(g))})));
+    shiftCommands.forEach(c=>{$(c.id).setAttribute('data-command',c.id);$(c.id).onclick=safe(e=>e&&e.shiftKey?promptShift(c,prefs.depth||0):runCommand(c.id));});
+  }
+  function menuItems(group){
+    const items=groupedCommands.get(group.id).map(c=>({id:c.choice||c.id,label:commandLabel(c),disabled:!available(c),onClick:()=>runCommand(c.id)}));
+    if(group.id==='time'){
+      items.push({id:'markerReference',label:t('Marker reference…','Опорные маркеры…'),disabled:!ready()||isDemo,onClick:showMarkerReference});
+      items.push(...timeToolItems());
+    }
+    return items;
   }
   function schedulePoll(){clearTimeout(pollTimer);if(disposed||connectionFailed||isDemo||!prefs.autoRefresh||!window.__adobe_cep__)return;const delay=Math.min(30000,prefs.poll*Math.pow(2,Math.min(readFailures,5)));pollTimer=setTimeout(()=>{if(!busy&&!document.hidden&&$('overlay').hidden&&!menuOwner&&!document.querySelector('input:focus'))refresh(true);else schedulePoll();},document.hasFocus()?delay:Math.max(3000,delay));}
   function safe(fn){return (...args)=>{try{return Promise.resolve(fn(...args)).catch(e=>status(e.message,true));}catch(e){status(e.message,true);}};}
@@ -108,10 +200,28 @@
     const p=result.preview;if(!p){openDialog(t('Preview','Предпросмотр'),'<p class="plan-message">'+(isDemo?t('Interface demo. Connect After Effects to calculate a real plan.','Демо интерфейса. Подключите After Effects для расчёта плана.'):t('AE returned no plan. Try again.','AE не вернул план. Повторите проверку.'))+'</p>');return;}
     const time=v=>M.timecode(v,p.frameDuration,p.displayStart),delta=(p.delta>0?'+':'−')+Number(Math.abs(p.delta/p.frameDuration).toFixed(3))+' '+frameWord(p.frames),kind={layer:t('Whole layer','Слой целиком'),edge:t('Edge + keys','Край и ключи'),property:t('Keys','Ключи')};
     const operation=p.arrangement?arrangeNames()[p.arrangement.action]:p.operation==='gap'?t('Close Gap','Убрать паузу'):p.operation==='insertTime'?t('Insert Time','Вставить время'):p.operation==='removeTime'?t('Remove Time','Удалить время'):(p.region==='before'?t('Before cursor','До курсора'):t('After cursor','После курсора'))+' · '+delta;
-    const rows=p.targets.map(target=>{const targetDelta=typeof target.delta==='number'?target.delta:p.delta,amount=Number(Math.abs(targetDelta/p.frameDuration).toFixed(6)),shift=(targetDelta>0?'+':targetDelta<0?'−':'')+amount+' '+frameWord(amount);const layer=state&&state.layers.find(l=>l.id===target.layerId),title=layer?layer.name:t('Composition markers','Маркеры композиции');let description=(Number.isInteger(target.axis)?'XYZ'[target.axis]+' · ':'')+kind[target.kind]+' · '+shift;if(target.kind==='edge'){description=[['inPoint','In'],['outPoint','Out']].filter(([k])=>Math.abs(target.before[k]-target.after[k])>p.frameDuration*.000001).map(([k,label])=>label+' '+time(target.before[k])+' → '+time(target.after[k])).join(' · ');}else if(target.kind==='layer')description+=' · In '+time(target.before.inPoint)+' → '+time(target.after.inPoint);return '<div class="plan-target"><div class="plan-target-title"><strong>'+(target.position?target.position+'. ':'')+esc(title)+'</strong><span>'+(target.index?'#'+target.index+' · ':'')+target.keys+' '+t('keys','кл.')+'</span></div><p>'+esc(description)+'</p></div>';}).join('');
+    const rows=p.targets.map(target=>{
+      const fd=target.frameDuration||p.frameDuration,localTime=v=>M.timecode(v,fd,target.displayStart===undefined?p.displayStart:target.displayStart);
+      const targetDelta=typeof target.delta==='number'?target.delta:p.delta;
+      const signedFrames=value=>(value>0?'+':value<0?'−':'')+Number(Math.abs(value/fd).toFixed(6));
+      const keyRange=Number.isFinite(target.minKeyDelta)&&Number.isFinite(target.maxKeyDelta)
+        ? signedFrames(target.minKeyDelta)+(Math.abs(target.maxKeyDelta-target.minKeyDelta)>fd*.000001?' … '+signedFrames(target.maxKeyDelta):'')
+        : '';
+      const shift=(keyRange||signedFrames(targetDelta))+' '+frameWord(Math.round(Math.abs((keyRange?target.maxKeyDelta:targetDelta)/fd)));
+      const rootLayer=state&&state.layers.find(l=>l.id===target.layerId);
+      let title=target.layerName||(rootLayer&&rootLayer.name)||t('Composition markers','Маркеры композиции');
+      if(target.compName&&p.nestedSources&&p.nestedSources.length)title=target.compName+' / '+title;
+      let description=(Number.isInteger(target.axis)?'XYZ'[target.axis]+' · ':'')+kind[target.kind]+' · '+shift;
+      if(target.kind==='edge'){
+        description=[['inPoint','In'],['outPoint','Out']].filter(([k])=>Math.abs(target.before[k]-target.after[k])>fd*.000001).map(([k,label])=>label+' '+localTime(target.before[k])+' → '+localTime(target.after[k])).join(' · ')+(keyRange?' · '+t('Keys','Ключи')+' '+shift:'');
+      }else if(target.kind==='layer')description+=' · In '+localTime(target.before.inPoint)+' → '+localTime(target.after.inPoint);
+      return '<div class="plan-target"><div class="plan-target-title"><strong>'+(target.position?target.position+'. ':'')+esc(title)+'</strong><span>'+(target.index?'#'+target.index+' · ':'')+target.keys+' '+t('keys','кл.')+'</span></div><p>'+esc(description)+'</p></div>';
+    }).join('');
+    const nested=p.nestedSources&&p.nestedSources.length?'<p class="plan-message">'+t('Nested sources','Вложенные композиции')+' ('+p.nestedSources.length+'): '+p.nestedSources.map(s=>esc(s.name)).join(', ')+'</p>':'';
+    const marker=p.markerReference?'<p class="plan-message">'+t('Marker reference · ','Опорный слой · ')+esc(p.markerReference.name)+' ('+p.markerReference.count+')</p>':'';
     const arrangement=p.arrangement?'<p class="plan-message">'+esc(orderNames()[p.arrangement.order])+' · '+(p.arrangement.anchor==='cursor'?t('AE Cursor','Курсор AE'):t('First Layer','Первый слой'))+(p.arrangement.action==='sequence'||p.arrangement.action==='stagger'?' · '+p.arrangement.frames+' '+frameWord(p.arrangement.frames):'')+'</p>':'';
     const interval=p.interval?'<p class="plan-message">'+esc((p.operation==='removeTime'?'['+time(p.interval.start)+' → '+time(p.interval.end)+')':time(p.interval.start)+' · '+delta)+' · '+(p.interval.crossing==='keep'?t('Keep crossing layers','Оставить пересекающие слои'):t('Retime crossing animation','Изменить тайминг анимации')))+'. '+t('Composition duration unchanged. No layers or keys are deleted.','Длительность композиции не меняется. Слои и ключи не удаляются.')+'</p>':'';
-    openDialog(t('Change Plan','План изменений'),'<p class="plan-context"><strong>'+esc(operation)+'</strong><br>'+esc(time(p.cti))+' · '+esc(scopeNames()[p.scope])+'</p>'+arrangement+interval+'<div class="plan-summary"><span><strong>'+p.counts.layers+'</strong> '+word(p.counts.layers,'layer','layers','слой','слоя','слоёв')+'</span><span><strong>'+p.counts.keys+'</strong> '+word(p.counts.keys,'key','keys','ключ','ключа','ключей')+'</span><span><strong>'+p.counts.skipped+'</strong> '+t('skipped','пропусков')+'</span>'+(p.counts.keptCrossing?'<span><strong>'+p.counts.keptCrossing+'</strong> '+t('kept','оставлено')+'</span>':'')+'</div>'+(p.blocked?'<p class="plan-message error">'+t('Writing blocked. See the reasons below.','Запись заблокирована. Причины ниже.')+'</p>':'<p class="plan-message">'+(p.counts.changes?t('Nothing changed yet.','Пока ничего не изменено.'):t('No matching changes. Scene stays unchanged.','Подходящих изменений нет. Сцена останется прежней.'))+'</p>')+(p.counts.mediaSkipped?'<p class="plan-message warning">'+t('Insufficient source handles: ','Без запаса исходника: ')+p.counts.mediaSkipped+'. '+t('These layers and their keys stay in place.','Эти слои и все их ключи останутся на месте.')+'</p>':'')+(p.counts.outsideComposition?'<p class="plan-message warning">'+p.counts.outsideComposition+' '+t('layers extend beyond the composition. Duration stays unchanged.','слоёв выходят за границы композиции. Длительность не меняется.')+'</p>':'')+'<div class="plan-targets">'+rows+'</div>'+(p.targetsOmitted?'<p class="note">'+t('More targets: ','Ещё целей: ')+p.targetsOmitted+'. '+t('See the report.','Подробности — в отчёте.')+'</p>':'')+(p.errors.length||p.skips.length?'<h3>'+t('Reasons & skipped targets','Причины и пропуски')+'</h3><ul class="plan-reasons">'+p.errors.concat(p.skips).map(reason=>'<li>'+esc(D(reason))+'</li>').join('')+'</ul>':'')+(p.skipsOmitted?'<p class="note">'+t('More skipped: ','Ещё пропусков: ')+p.skipsOmitted+'.</p>':'')+'<div class="plan-actions"><button id="apply-preview" class="primary-button" '+(p.blocked||!p.counts.changes||isDemo?'disabled':'')+'>'+t('Apply Plan','Применить план')+'</button><button id="plan-report" class="quiet-button">'+t('Technical Report','Технический отчёт')+'</button></div><p class="plan-footnote">'+t('Valid for 2 minutes. AE rechecks the same targets before writing. Changes require a new preview.','План действует 2 минуты. AE повторно проверит те же цели перед записью. При изменениях потребуется новая проверка.')+'</p>');
+    openDialog(t('Change Plan','План изменений'),'<p class="plan-context"><strong>'+esc(operation)+'</strong><br>'+esc(time(p.cti))+' · '+esc(scopeNames()[p.scope])+'</p>'+arrangement+interval+nested+marker+'<div class="plan-summary"><span><strong>'+p.counts.layers+'</strong> '+word(p.counts.layers,'layer','layers','слой','слоя','слоёв')+'</span><span><strong>'+p.counts.keys+'</strong> '+word(p.counts.keys,'key','keys','ключ','ключа','ключей')+'</span><span><strong>'+p.counts.skipped+'</strong> '+t('skipped','пропусков')+'</span>'+(p.counts.keptCrossing?'<span><strong>'+p.counts.keptCrossing+'</strong> '+t('kept','оставлено')+'</span>':'')+'</div>'+(p.blocked?'<p class="plan-message error">'+t('Writing blocked. See the reasons below.','Запись заблокирована. Причины ниже.')+'</p>':'<p class="plan-message">'+(p.counts.changes?t('Nothing changed yet.','Пока ничего не изменено.'):t('No matching changes. Scene stays unchanged.','Подходящих изменений нет. Сцена останется прежней.'))+'</p>')+(p.counts.mediaSkipped?'<p class="plan-message warning">'+t('Insufficient source handles: ','Без запаса исходника: ')+p.counts.mediaSkipped+'. '+t('These layers and their keys stay in place.','Эти слои и все их ключи останутся на месте.')+'</p>':'')+(p.counts.outsideComposition?'<p class="plan-message warning">'+p.counts.outsideComposition+' '+t('layers extend beyond the composition. Duration stays unchanged.','слоёв выходят за границы композиции. Длительность не меняется.')+'</p>':'')+'<div class="plan-targets">'+rows+'</div>'+(p.targetsOmitted?'<p class="note">'+t('More targets: ','Ещё целей: ')+p.targetsOmitted+'. '+t('See the report.','Подробности — в отчёте.')+'</p>':'')+(p.errors.length||p.skips.length?'<h3>'+t('Reasons & skipped targets','Причины и пропуски')+'</h3><ul class="plan-reasons">'+p.errors.concat(p.skips).map(reason=>'<li>'+esc(D(reason))+'</li>').join('')+'</ul>':'')+(p.skipsOmitted?'<p class="note">'+t('More skipped: ','Ещё пропусков: ')+p.skipsOmitted+'.</p>':'')+'<div class="plan-actions"><button id="apply-preview" class="primary-button" '+(p.blocked||!p.counts.changes||isDemo?'disabled':'')+'>'+t('Apply Plan','Применить план')+'</button><button id="plan-report" class="quiet-button">'+t('Technical Report','Технический отчёт')+'</button></div><p class="plan-footnote">'+t('Valid for 2 minutes. AE rechecks the same targets before writing. Changes require a new preview.','План действует 2 минуты. AE повторно проверит те же цели перед записью. При изменениях потребуется новая проверка.')+'</p>');
     activePreview=p;$('apply-preview').onclick=safe(()=>{const id=p.id;closeDialog();return request({op:'applyPreview',previewId:id});});$('plan-report').onclick=()=>showReport(true);
   }
   function showArrange(action,commandId){
@@ -124,14 +234,144 @@
     if(field)field.oninput=()=>{const ok=valid();field.setAttribute('aria-invalid',String(!ok));$('arrange-preview').disabled=!ok||busy;$('arrange-error').textContent=ok?'':t('Enter a whole frame count in the shown range.','Введите целое число кадров в указанном диапазоне.');};
     $('arrange-preview').onclick=safe(()=>{if(!valid())return;const frames=align?1:Number(field.value);if(action==='sequence')sequenceGap=frames;return request(C.build(commandId,prefs,{order:arrangeOrder,anchor:align?'cursor':arrangeAnchor,frames},true));});
   }
+  function timeToolItems(){
+    const disabled=!ready()||isDemo;
+    return [
+      {id:'measure-time',label:t('Measure selection','Измерить выделение'),disabled,onClick:measureSelection},
+      {id:'time-zone',label:t('Range from cursor','Интервал от курсора'),disabled,onClick:showTimeZone},
+      {id:'offset-counter',label:t('Offset counter','Счётчик сдвига'),disabled,onClick:showOffsetCounter}
+    ];
+  }
+  async function measureSelection(){
+    const revision=dialogRevision;
+    const result=await request({op:'measureTime'},false,state.compId);
+    if(!result||!result.measurement||revision!==dialogRevision)return;
+    const m=result.measurement, rounded=Math.round(m.frames);
+    const title=m.kind==='keys'?t('Selected key span','Размах выделенных ключей'):m.kind==='cursorKey'?t('Cursor to selected key','От курсора до ключа'):t('Selected layer span','Размах выделенных слоёв');
+    const display=n=>M.timecode(n,result.state.frameDuration,result.state.displayStart);
+    openDialog(title,'<p class="plan-context">'+Number(m.frames.toFixed(4))+' '+frameWord(m.frames)+'</p><p>'+display(m.start)+' → '+display(m.end)+'</p>'+(m.seam?'<p class="note">'+(m.seam.kind==='gap'?t('Gap','Зазор'):t('Overlap','Перекрытие'))+' · '+Number(m.seam.frames.toFixed(4))+' '+frameWord(m.seam.frames)+'</p>':'')+'<div class="operation-actions"><button id="use-measure" class="primary-button">'+t('Use step','Использовать шаг')+' · '+rounded+'</button>'+(m.seam?'<button id="use-seam" class="secondary-button">'+(m.seam.kind==='gap'?t('Use gap','Взять зазор'):t('Use overlap','Взять перекрытие'))+'</button>':'')+'</div>');
+    if(m.seam){const step=Math.round(m.seam.frames);$('use-seam').disabled=step<1||step>1000000;$('use-seam').onclick=()=>{setFrames(step);closeDialog();};}
+    $('use-measure').disabled=rounded<1||rounded>1000000;
+    $('use-measure').onclick=()=>{setFrames(rounded);closeDialog();};
+  }
+  function showOffsetCounter(){
+    const value=state.offsetCounter||0, compId=state.compId, baseToken=state.token;
+    openDialog(t('Offset counter','Счётчик сдвига'),'<p class="plan-context">'+(value>0?'+':'')+value+' '+frameWord(value)+'</p><p class="note">'+t('Signed frame step, counted once per successful shift in this composition during this session. Undo and Redo do not change the counter.','Шаг со знаком для каждого успешного сдвига в этой композиции за сеанс. Undo и Redo не меняют счётчик.')+'</p><div class="operation-actions"><button id="use-counter" class="primary-button">'+t('Use as step','Использовать как шаг')+'</button><button id="reset-counter" class="secondary-button">'+t('Reset counter','Обнулить счётчик')+'</button></div>');
+    $('use-counter').disabled=!value||Math.abs(value)>1000000;
+    $('use-counter').onclick=()=>{setFrames(Math.abs(value));closeDialog();};
+    $('reset-counter').disabled=!value;
+    $('reset-counter').onclick=safe(async()=>{const revision=dialogRevision;const result=await request({op:'resetCounter',baseToken},false,compId);if(result&&!result.failure&&revision===dialogRevision)showOffsetCounter();});
+  }
+  function showTimeZone(){
+    const comp=state, fd=comp.frameDuration, max=Math.floor(comp.duration/fd+0.000001), origin=Math.round(comp.time/fd);
+    const initial=Math.min(max,origin+prefs.frames)>origin?Math.min(max,origin+prefs.frames):Math.max(0,origin-prefs.frames);
+    const display=n=>M.timecode(n,fd,comp.displayStart);
+    openDialog(t('Range from cursor','Интервал от курсора'),'<p class="plan-context">'+t('Cursor','Курсор')+' · '+display(comp.time)+'</p><label class="setting-row" for="zone-end"><span>'+t('Other endpoint · frame from comp start','Вторая граница · кадр от начала композиции')+'</span><input class="arrange-number" id="zone-end" type="number" min="0" max="'+max+'" step="1" value="'+initial+'"></label><input id="zone-slider" type="range" min="0" max="'+max+'" step="1" value="'+initial+'" aria-label="'+t('Range endpoint','Граница интервала')+'"><p id="zone-description" role="status"></p><div class="operation-actions"><button id="use-zone" class="primary-button">'+t('Use as step','Использовать как шаг')+'</button><button id="apply-zone" class="secondary-button">'+t('Set AE work area','Задать рабочую область AE')+'</button></div>');
+    const field=$('zone-end'),slider=$('zone-slider'),apply=$('apply-zone'),use=$('use-zone');
+    function update(){
+      const end=Number(field.value), valid=String(field.value).trim()!==''&&Number.isInteger(end)&&end>=0&&end<=max;
+      const span=Math.abs(end-comp.time/fd), rounded=Math.round(span);
+      field.setAttribute('aria-invalid',String(!valid));apply.disabled=!valid||span<1-0.000001;
+      use.disabled=!valid||rounded<1||rounded>1000000;
+      if(valid)slider.value=end;
+      $('zone-description').textContent=valid?display(Math.min(comp.time,end*fd))+' → '+display(Math.max(comp.time,end*fd))+' · '+Number(span.toFixed(4))+' '+frameWord(span):t('Choose an endpoint inside the composition.','Выберите границу внутри композиции.');
+    }
+    field.oninput=update;slider.oninput=()=>{field.value=slider.value;update();};
+    use.onclick=()=>{setFrames(Math.round(Math.abs(Number(field.value)-comp.time/fd)));closeDialog();};
+    apply.onclick=safe(async()=>{const revision=dialogRevision;const result=await request({op:'setZone',baseToken:comp.token,endFrame:Number(field.value)},false,comp.compId);if(result&&!result.failure&&revision===dialogRevision)closeDialog();});
+    update();
+  }
   function showInterval(action,commandId){
     openDialog(action==='insert'?t('Insert Time','Вставить время'):t('Remove Time','Удалить время'),'<p class="plan-context">'+readFrames()+' '+frameWord(readFrames())+' '+t('at the AE cursor','от курсора AE')+' · '+esc(scopeNames()[prefs.scope])+'</p><p class="setting-label">'+t('Layers crossing the interval','Слои на пересечении интервала')+'</p><div class="settings-choice"><button data-crossing="keep" class="active" aria-pressed="true">'+t('Keep','Оставить')+'</button><button data-crossing="retime" aria-pressed="false">'+t('Retime Animation','Изменить анимацию')+'</button></div><p id="crossing-note" class="note"></p><p class="note">'+t('Later layers move with all their keys. Composition duration stays unchanged. No layers or keys are deleted.','Слои после интервала сдвигаются со всеми ключами. Длительность композиции не меняется. Слои и ключи не удаляются.')+'</p><div class="operation-actions"><button id="interval-preview" class="primary-button">'+t('Preview Changes','Показать план')+'</button></div>');
     let crossing='keep';const note=()=>{$('crossing-note').textContent=crossing==='keep'?t('Crossing layers and their keys remain entirely in place.','Пересекающие слои и все их ключи остаются на месте.'):t('Extends or shortens crossing animation. Video, audio, precomps and Time Remap need a manual split in AE. Keys inside a removed interval block writing.','Удлиняет или сокращает пересекающую анимацию. Видео, аудио, прекомпозиции и Time Remap требуют ручного разделения в AE. Ключи внутри удаляемого интервала блокируют запись.');};note();
     $('dialog-body').querySelectorAll('[data-crossing]').forEach(b=>b.onclick=()=>{crossing=b.dataset.crossing;$('dialog-body').querySelectorAll('[data-crossing]').forEach(el=>{el.classList.toggle('active',el.dataset.crossing===crossing);el.setAttribute('aria-pressed',String(el.dataset.crossing===crossing));});note();});
     $('interval-preview').onclick=safe(()=>request(C.build(commandId,Object.assign({},prefs,{frames:readFrames()}),{crossing},true)));
   }
+  function offsetContext(){
+    const active=[];
+    if(prefs.depth!==0)active.push(prefs.depth===-1?t('All precomp levels','Все уровни прекомпозиций'):t('Precomp depth ','Глубина прекомпозиций ')+prefs.depth);
+    if(prefs.labelFilter!=='off')active.push((prefs.labelFilter==='only'?t('Only labels ','Только метки '):t('Protect labels ','Защита меток '))+(prefs.labelIds.join(', ')||'—'));
+    if(prefs.skipLocked||prefs.skipDisabled||prefs.skipUnsupported)active.push(t('Skip rules on','Правила пропуска'));
+    if(state&&state.markerReference)active.push(t('Markers · ','Маркеры · ')+state.markerReference.name);
+    return active;
+  }
+  function showOffsetOptions(){
+    const compId=state?state.compId:null;
+    const labelName=i=>i===0?t('0 · None','0 · Без метки'):String(i);
+    const labels=Array.from({length:17},(_,i)=>'<button type="button" data-label-id="'+i+'" aria-pressed="'+prefs.labelIds.includes(i)+'">'+labelName(i)+'</button>').join('');
+    openDialog(t('Offset options','Параметры сдвига'),
+      '<h3>'+t('Precompositions','Прекомпозиции')+'</h3>'+
+      '<label class="setting-row"><span>'+t('Nested depth','Глубина вложенности')+'</span><input id="offset-depth" class="arrange-number" type="number" step="1" min="-1" max="1000" value="'+prefs.depth+'"></label>'+
+      '<p class="note">'+t('0 edits the current composition. 1 includes its direct sources. −1 includes all levels. Nested changes open a plan.','0 — текущая композиция. 1 — также её прямые прекомпозиции. −1 — все уровни. Вложенные изменения открываются в плане.')+'</p>'+
+      '<h3>'+t('Keyframe labels','Метки ключей')+'</h3>'+choice('labelFilter',[['off',t('Off','Выкл.')],['protect',t('Protect selected labels','Защитить метки')],['only',t('Move only these labels','Только эти метки')]])+
+      '<div class="label-grid" role="group" aria-label="'+t('AE label numbers','Номера меток AE')+'">'+labels+'</div><p id="filter-hint" class="note"></p>'+
+      '<div class="setting-row"><label for="key-label">'+t('Label for selected AE keys','Метка для выделенных ключей AE')+'</label><input id="key-label" class="arrange-number" type="number" step="1" min="0" max="16" value="'+(prefs.labelIds[0]||0)+'"></div>'+
+      '<button id="assign-key-label" class="secondary-button">'+t('Assign to selected keys','Назначить выделенным ключам')+'</button>'+
+      '<h3>'+t('Skip during offset','Пропускать при сдвиге')+'</h3><div class="settings-grid">'+
+      toggle('skipLocked',t('Locked layers','Заблокированные слои'))+
+      toggle('skipDisabled',t('Disabled layers and properties','Выключенные слои и свойства'))+
+      toggle('skipUnsupported',t('Unsupported properties','Неподдерживаемые свойства'))+'</div>'+
+      '<p id="offset-options-status" class="settings-status" role="status"></p><button id="offset-markers" class="secondary-button">'+t('Marker reference…','Опорные маркеры…')+'</button>');
+    const body=$('dialog-body'),depth=$('offset-depth'),label=$('key-label'),assign=$('assign-key-label');
+    function sync(){
+      const needsLabels=prefs.labelFilter!=='off'&&!prefs.labelIds.length;
+      $('filter-hint').textContent=needsLabels?t('Choose at least one AE label number to use this filter.','Для этого фильтра выберите хотя бы один номер метки AE.'):t('Numbers match the label slots in AE. 0 includes unlabeled keys.','Номера соответствуют меткам AE. 0 включает ключи без метки.');
+      body.querySelectorAll('[data-label-id]').forEach(b=>b.setAttribute('aria-pressed',String(prefs.labelIds.includes(Number(b.dataset.labelId)))));
+      body.querySelectorAll('[data-pref]').forEach(b=>{const active=b.dataset.value===prefs.labelFilter;b.setAttribute('aria-pressed',String(active));b.classList.toggle('active',active);});
+      assign.disabled=!ready()||isDemo||!/^\d+$/.test(label.value)||Number(label.value)>16;
+      $('offset-markers').disabled=!ready()||isDemo;
+    }
+    body.querySelectorAll('[data-pref]').forEach(b=>b.onclick=()=>{change('labelFilter',b.dataset.value);sync();});
+    body.querySelectorAll('[data-label-id]').forEach(b=>b.onclick=()=>{
+      const id=Number(b.dataset.labelId);
+      change('labelIds',prefs.labelIds.includes(id)?prefs.labelIds.filter(v=>v!==id):prefs.labelIds.concat(id));
+      sync();
+    });
+    body.querySelectorAll('[data-toggle]').forEach(el=>el.onchange=()=>change(el.dataset.toggle,el.checked));
+    depth.oninput=()=>{
+      const ok=/^-?\d+$/.test(depth.value)&&Number(depth.value)>=-1&&Number(depth.value)<=1000;
+      depth.setAttribute('aria-invalid',String(!ok));
+      $('offset-options-status').textContent=ok?'':t('Enter a whole depth from −1 to 1000.','Введите целую глубину от −1 до 1000.');
+      if(ok)change('depth',Number(depth.value));
+    };
+    label.oninput=()=>{sync();label.setAttribute('aria-invalid',String(!/^\d+$/.test(label.value)||Number(label.value)>16));};
+    assign.onclick=safe(async()=>{
+      if(assign.disabled||!ready())return;
+      assign.disabled=true;
+      const revision=dialogRevision;
+      await request({op:'labelSelectedKeys',label:Number(label.value)},false,compId);
+      if(revision!==dialogRevision)return;
+      $('offset-options-status').textContent=D(statusRaw);
+      sync();
+    });
+    $('offset-markers').onclick=showMarkerReference;
+    sync();
+  }
+  function showMarkerReference(){
+    if(!ready()||isDemo)return;
+    const compId=state.compId,reference=state.markerReference,selected=state.layers.find(l=>l.selected);
+    const activeId=reference?reference.layerId:selected?selected.id:state.layers.length?state.layers[0].id:null;
+    const options=state.layers.map((l,i)=>'<option value="'+l.id+'"'+(l.id===activeId?' selected':'')+'>#'+(l.index||i+1)+' · '+esc(l.name)+'</option>').join('');
+    openDialog(t('Marker reference','Опорные маркеры'),
+      '<p class="plan-context">'+esc(state.name)+'</p><p class="note">'+t('Choose a layer with markers. Each marker defines a Before/After boundary and contributes one step. The reference layer stays in place.','Выберите слой с маркерами. Каждый маркер задаёт границу «До/После» и добавляет один шаг сдвига. Опорный слой остаётся на месте.')+'</p>'+
+      (reference?'<p>'+t('Current reference · ','Опорный слой · ')+esc(reference.name)+' ('+reference.count+')</p>':'')+
+      '<label for="marker-layer">'+t('Reference layer','Слой с маркерами')+'</label><select id="marker-layer" class="layer-picker">'+options+'</select>'+
+      '<p id="marker-status" class="settings-status" role="status"></p><div class="operation-actions"><button id="set-marker-reference" class="primary-button" '+(options?'':'disabled')+'>'+t('Use layer markers','Использовать маркеры')+'</button>'+
+      '<button id="clear-marker-reference" class="secondary-button" '+(reference?'':'disabled')+'>'+t('Clear reference','Убрать привязку')+'</button></div>');
+    const picker=$('marker-layer');if(activeId!==null)picker.value=String(activeId);
+    async function update(payload){
+      const revision=dialogRevision;
+      const result=await request(payload,false,compId);
+      if(revision!==dialogRevision)return;
+      if(result&&!result.failure){closeDialog();return;}
+      $('marker-status').textContent=D(statusRaw);
+    }
+    $('set-marker-reference').onclick=safe(()=>update({op:'setMarkerReference',layerId:Number(picker.value)}));
+    $('clear-marker-reference').onclick=safe(()=>update({op:'clearMarkerReference'}));
+  }
   function showSettings(){
-    openDialog(t('Settings','Настройки'),'<h3>'+t('Language','Язык')+'</h3>'+choice('language',[['en','English'],['ru','Русский']])+'<h3>'+t('Workflow','Работа')+'</h3><div class="settings-grid">'+toggle('rememberContext',t('Remember scope and mode','Запоминать область и режим'))+toggle('autoRefresh',t('Refresh from AE automatically','Обновлять сведения из AE'))+toggle('compMarkers',t('Move composition markers','Переносить маркеры композиции'))+'</div><p class="note">'+t('Starts in Auto · Layers + Keys unless remembered. Step and appearance are always saved.','Без запоминания открывается Авто · Слои и ключи. Шаг и внешний вид сохраняются всегда.')+'</p><p class="setting-label">'+t('When video source handles run out','Если закончились исходные кадры видео')+'</p>'+choice('mediaPolicy',[['skip',t('Keep This Layer','Оставить этот слой')],['stop',t('Cancel All','Отменить всё')]])+'<p class="note">'+t('Skipped layers keep all their keys. Other available targets move.','Пропущенный слой и все его ключи остаются на месте. Остальные доступные цели сдвигаются.')+'</p><h3>'+t('Appearance','Внешний вид')+'</h3><p class="setting-label">'+t('Theme','Тема')+'</p>'+choice('theme',[['dark',t('Dark','Тёмная')],['light',t('Light','Светлая')],['host',t('Follow AE','Как в AE')]])+'<p class="setting-label">'+t('Font','Шрифт')+'</p>'+choice('font',[['system',t('System','Системный')],['sans','Arial'],['mono',t('Mono','Моно')]])+'<div class="settings-grid">'+range('fontSize',t('Text size','Размер текста'))+range('rowHeight',t('Shift button height','Размер кнопок сдвига'))+range('spacing',t('Button spacing','Интервал кнопок'))+range('radius',t('Corner radius','Скругление'))+'<label class="setting-row"><span>'+t('Accent','Акцент')+'</span><input id="pref-accent" type="color" value="'+prefs.accent+'"></label>'+toggle('motion',t('Window animation','Анимация окон'))+'<label class="setting-row"><span>'+t('High contrast','Повышенный контраст')+'</span><input type="checkbox" data-contrast="true" '+(prefs.contrast==='high'?'checked':'')+'></label></div><p class="setting-label">'+t('Density','Плотность')+'</p><div class="settings-choice"><button data-preset="compact">'+t('Compact','Компактно')+'</button><button data-preset="balanced">'+t('Balanced','Обычно')+'</button><button data-preset="large">'+t('Large','Крупнее')+'</button></div><h3>'+t('Quick Steps','Быстрые шаги')+'</h3><label class="note" for="quick-step-values">'+t('Up to 8 frame values, separated by commas','До 8 значений в кадрах, через запятую')+'</label><input id="quick-step-values" class="quick-step-setting" value="'+esc(quickDraft===null?prefs.quickSteps.join(', '):quickDraft)+'"><p id="settings-status" class="settings-status" role="status">'+esc(D(saveError)||t('Changes save automatically.','Изменения сохраняются автоматически.'))+'</p><div class="settings-actions"><button id="export-settings" class="secondary-button">'+t('Export JSON','Экспорт JSON')+'</button><button id="import-settings" class="secondary-button">'+t('Import','Импорт')+'</button><button id="reset-appearance" class="quiet-button">'+t('Reset Appearance','Сбросить вид')+'</button></div>');
+    openDialog(t('Settings','Настройки'),'<h3>'+t('Language','Язык')+'</h3>'+choice('language',[['en','English'],['ru','Русский']])+'<h3>'+t('Workflow','Работа')+'</h3><div class="settings-grid">'+toggle('rememberContext',t('Remember scope and mode','Запоминать область и режим'))+toggle('autoRefresh',t('Refresh from AE automatically','Обновлять сведения из AE'))+toggle('compMarkers',t('Move composition markers','Переносить маркеры композиции'))+'</div><button id="open-offset-options" class="secondary-button">'+t('Offset options…','Параметры сдвига…')+'</button><p class="note">'+t('Starts in Auto · Layers + Keys unless remembered. Step and appearance are always saved.','Без запоминания открывается Авто · Слои и ключи. Шаг и внешний вид сохраняются всегда.')+'</p><p class="setting-label">'+t('When video source handles run out','Если закончились исходные кадры видео')+'</p>'+choice('mediaPolicy',[['skip',t('Keep This Layer','Оставить этот слой')],['stop',t('Cancel All','Отменить всё')]])+'<p class="note">'+t('Skipped layers keep all their keys. Other available targets move.','Пропущенный слой и все его ключи остаются на месте. Остальные доступные цели сдвигаются.')+'</p><h3>'+t('Appearance','Внешний вид')+'</h3><p class="setting-label">'+t('Theme','Тема')+'</p>'+choice('theme',[['dark',t('Dark','Тёмная')],['light',t('Light','Светлая')],['host',t('Follow AE','Как в AE')]])+'<p class="setting-label">'+t('Font','Шрифт')+'</p>'+choice('font',[['system',t('System','Системный')],['sans','Arial'],['mono',t('Mono','Моно')]])+'<div class="settings-grid">'+range('fontSize',t('Text size','Размер текста'))+range('rowHeight',t('Shift button height','Размер кнопок сдвига'))+range('spacing',t('Button spacing','Интервал кнопок'))+range('radius',t('Corner radius','Скругление'))+'<label class="setting-row"><span>'+t('Accent','Акцент')+'</span><input id="pref-accent" type="color" value="'+prefs.accent+'"></label>'+toggle('motion',t('Window animation','Анимация окон'))+'<label class="setting-row"><span>'+t('High contrast','Повышенный контраст')+'</span><input type="checkbox" data-contrast="true" '+(prefs.contrast==='high'?'checked':'')+'></label></div><p class="setting-label">'+t('Density','Плотность')+'</p><div class="settings-choice"><button data-preset="compact">'+t('Compact','Компактно')+'</button><button data-preset="balanced">'+t('Balanced','Обычно')+'</button><button data-preset="large">'+t('Large','Крупнее')+'</button></div><h3>'+t('Quick Steps','Быстрые шаги')+'</h3><label class="note" for="quick-step-values">'+t('Up to 8 frame values, separated by commas','До 8 значений в кадрах, через запятую')+'</label><input id="quick-step-values" class="quick-step-setting" value="'+esc(quickDraft===null?prefs.quickSteps.join(', '):quickDraft)+'"><p id="settings-status" class="settings-status" role="status">'+esc(D(saveError)||t('Changes save automatically.','Изменения сохраняются автоматически.'))+'</p><div class="settings-actions"><button id="export-settings" class="secondary-button">'+t('Export JSON','Экспорт JSON')+'</button><button id="import-settings" class="secondary-button">'+t('Import','Импорт')+'</button><button id="reset-appearance" class="quiet-button">'+t('Reset Appearance','Сбросить вид')+'</button></div>');
+    $('open-offset-options').onclick=showOffsetOptions;
     const body=$('dialog-body');body.querySelectorAll('[data-pref]').forEach(b=>b.onclick=()=>{const key=b.dataset.pref;if(!change(key,b.dataset.value))return;if(key==='language'){showSettings();const active=[...$('dialog-body').querySelectorAll('[data-pref]')].find(el=>el.dataset.pref==='language'&&el.dataset.value===prefs.language);if(active)active.focus();return;}body.querySelectorAll('[data-pref]').forEach(el=>{el.classList.toggle('active',prefs[el.dataset.pref]===el.dataset.value);el.setAttribute('aria-pressed',String(prefs[el.dataset.pref]===el.dataset.value));});});
     body.querySelectorAll('[data-range]').forEach(el=>el.oninput=()=>{if(change(el.dataset.range,Number(el.value)))el.nextElementSibling.textContent=el.value;});body.querySelectorAll('[data-toggle]').forEach(el=>el.onchange=()=>change(el.dataset.toggle,el.checked));body.querySelector('[data-contrast]').onchange=e=>change('contrast',e.target.checked?'high':'normal');$('pref-accent').oninput=e=>change('accent',e.target.value);
     $('quick-step-values').oninput=e=>{quickDraft=e.target.value;try{change('quickSteps',M.parseSteps(e.target.value));e.target.setAttribute('aria-invalid','false');}catch(error){e.target.setAttribute('aria-invalid','true');$('settings-status').textContent=D(error.message);}};
@@ -140,19 +380,30 @@
   }
   function showHelp(){openDialog(t('How FrameFlow Works','Как работает FrameFlow'),'<p class="help-text"><strong>'+t('1. Place the cursor in AE.','1. Поставьте курсор в таймлайне AE.')+'</strong><br>'+t('Choose a frame step using presets, slider or − / +. Shift changes it by 10; the wheel works over the focused number.','Выберите шаг кнопкой, ползунком или − / +. Shift меняет шаг на 10 кадров; колесо работает над активным числом.')+'</p><p class="help-text"><strong>'+t('2. Scope defaults to Auto.','2. По умолчанию — Авто.')+'</strong><br>'+t('Auto uses selected AE layers, or all layers when none are selected. Selected never expands an empty selection.','Авто использует выделенные в AE слои; без выделения — всю композицию. «Выделенные» без выделения не расширяет область.')+'</p><p class="help-text"><strong>'+t('3. Choose Before or After cursor, then an arrow.','3. Выберите До или После курсора и стрелку.')+'</strong><br>'+t('Left moves earlier; right moves later. Before excludes a key at the cursor; After includes it. Each action reads the current AE cursor and selection.','Влево — раньше, вправо — позже. «До» не включает ключ на курсоре; «После» включает. Перед действием курсор и выделение перечитываются из AE.')+'</p><p class="help-text">'+Object.keys(modeNames()).map(k=>'<strong>'+esc(modeNames()[k])+':</strong> '+esc(modeNotes()[k])).join('<br>')+'</p><p class="help-text"><strong>'+t('Close Gap','Убрать паузу')+'</strong> — '+t('removes the empty gap under the cursor, independent of step and mode. Plan offers a preview for any direction or Close Gap. Apply Plan executes only the checked targets.','удаляет пустой промежуток под курсором независимо от шага и режима. Меню «План» проверяет любое направление или удаление паузы. «Применить план» выполняет только проверенные изменения.')+'</p><p class="help-text"><strong>'+t('Time → Insert / Remove','Время → Вставить / Удалить')+'</strong> — '+t('shifts later layers by the frame step. Keep leaves crossing layers intact; Retime Animation changes eligible animation only. Footage crossings need a manual AE split. No layers or keys are deleted; composition duration stays unchanged. Always preview the interval before applying.','сдвигает последующие слои на выбранный шаг. «Оставить» сохраняет пересекающие слои целиком. «Изменить анимацию» меняет только доступную анимацию. Видео и аудио на пересечении требуют ручного разделения в AE. Слои и ключи не удаляются; длительность композиции не меняется. Перед применением всегда показывается план.')+'</p><p class="help-text"><strong>Arrange</strong> — '+t('Align In/Out to the cursor, Stagger layer starts or Sequence end to end with a gap. Set Top → Bottom, Bottom → Top or Start Time order and the cursor/first-layer anchor. Whole layers and all native keys move together. Preview is required; composition markers and duration stay unchanged.','Выравнивание начала/конца к курсору, лесенка начал или последовательность с зазором. Выберите порядок сверху, снизу или по началу и точку отсчёта — курсор либо первый слой. Целые слои и все нативные ключи перемещаются вместе. Требуется план; маркеры и длительность композиции не меняются.')+'</p><p class="help-text">'+t('Insufficient video handles keep that entire layer in place by default. Settings can cancel the entire operation instead. Locked targets and key collisions block writing. Undo / Redo in AE. R refreshes; ? opens Help. Report opens and copies the diagnostics.','Если исходных кадров не хватает, весь этот слой по умолчанию остаётся на месте. В настройках можно выбрать «Отменить всё». Блокировки и коллизии ключей запрещают запись. Undo / Redo выполняйте в AE. R обновляет сведения; ? открывает справку. «Отчёт» открывает и копирует диагностику.')+'</p><p class="note">FrameFlow '+M.VERSION+' · Made by Nasaat</p>');}
   function keydown(e){
-    if(!$('overlay').hidden){if(e.key==='Escape'){e.preventDefault();closeDialog();}if(e.key==='Tab'){const a=[...$('dialog').querySelectorAll('button,input,textarea')].filter(el=>!el.disabled);if(a.length){const i=a.indexOf(document.activeElement),next=e.shiftKey?(i<=0?a.length-1:i-1):(i+1)%a.length;e.preventDefault();a[next].focus();}}return;}
+    if(!$('overlay').hidden){if(e.key==='Escape'){e.preventDefault();closeDialog();}if(e.key==='Tab'){const a=[...$('dialog').querySelectorAll('button,input,select,textarea')].filter(el=>!el.disabled);if(a.length){const i=a.indexOf(document.activeElement),next=e.shiftKey?(i<=0?a.length-1:i-1):(i+1)%a.length;e.preventDefault();a[next].focus();}}return;}
     if(menuOwner){const owner=menuOwner,list=[...$('menu').querySelectorAll('button')].filter(b=>!b.disabled),i=list.indexOf(document.activeElement);if(e.key==='Escape'){e.preventDefault();closeMenu();owner.focus();}else if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();list[(i+(e.key==='ArrowDown'?1:-1)+list.length)%list.length].focus();}return;}
-    if(e.ctrlKey||e.metaKey||e.altKey||['INPUT','TEXTAREA'].includes(e.target.tagName))return;if(e.key.toLowerCase()==='r'){e.preventDefault();refresh();}else if(e.key==='?'){e.preventDefault();showHelp();}
+    if(e.ctrlKey||e.metaKey||e.altKey||['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName))return;if(e.key.toLowerCase()==='r'){e.preventDefault();refresh();}else if(e.key==='?'){e.preventDefault();showHelp();}
   }
   function setup(){
     try{preferenceStore=M.storage(localStorage);const loaded=preferenceStore.load();prefs=M.startup(loaded.value);if(loaded.error)saveError=loaded.error;}catch(e){prefs=M.validate(M.defaults);saveError=t('Storage unavailable. Settings apply to this session.','Хранилище недоступно. Настройки действуют в этой сессии.');preferenceStore={save(){throw Error(saveError);}};}
     setupCommandSurfaces();$('frames').value=prefs.frames;applyAppearance();renderPresets();
     if(window.__adobe_cep__&&typeof window.__adobe_cep__.evalScript==='function'){bridge=FFBridge.createCEP(window.__adobe_cep__,{language:()=>prefs.language});refresh();}else{bridge=FFBridge.create(()=>{throw Error(t('Open FrameFlow via Window → Extensions in After Effects.','Откройте FrameFlow через Window → Extensions в After Effects.'));});$('demo').hidden=false;status(t('Open the panel in After Effects','Откройте панель в After Effects'));render();}
+    listenKBar();
     $('demo').onclick=()=>{bridge.dispose();bridge=FFDemo.create();isDemo=true;connectionFailed=false;readFailures=0;refresh();};if(!window.__adobe_cep__&&new URLSearchParams(location.search).get('demo')==='1')$('demo').click();
+    $('offset-context').onclick=showOffsetOptions;
     $('refresh').onclick=()=>refresh();$('open-settings').onclick=showSettings;$('open-help').onclick=showHelp;$('open-report').onclick=()=>showReport(true);
     $('scope').onclick=()=>openMenu($('scope'),Object.keys(scopeNames()).map(v=>({id:v,label:scopeNames()[v],active:prefs.scope===v,onClick:()=>change('scope',v)})));
     $('mode').onclick=()=>openMenu($('mode'),Object.keys(modeNames()).map(v=>({id:v,label:modeNames()[v],note:modeNotes()[v],active:prefs.mode===v,onClick:()=>change('mode',v)})));
-    $('frames').oninput=()=>{const valid=validFrames();frameDraft=!valid;$('frames').setAttribute('aria-invalid',String(!valid));if(valid)change('frames',readFrames());else{status(t('Enter 1–1000000 whole frames.','Введите от 1 до 1000000 целых кадров.'),true);render();}};
+    const frameInput=$('frames');
+    frameInput.title=t('Frames or calculation. Press Enter to calculate, e.g. (24 + 6) / 2.','Кадры или выражение. Enter вычисляет результат, например (24 + 6) / 2.');
+    frameInput.oninput=()=>{
+      const plain=validFrames();frameDraft=!plain;
+      if(plain){frameInput.setAttribute('aria-invalid','false');change('frames',readFrames());return;}
+      let computable=false;try{M.parseFrameStep(frameInput.value);computable=true;}catch(ignored){}
+      frameInput.setAttribute('aria-invalid',String(!computable));
+      status(computable?t('Press Enter to use the calculated step.','Нажмите Enter, чтобы задать рассчитанный шаг.'):t('Enter 1–1000000 whole frames or a calculation.','Введите от 1 до 1000000 целых кадров или выражение.'),!computable);render();
+    };
+    frameInput.addEventListener('keydown',e=>{if(e.key!=='Enter')return;e.preventDefault();try{const value=M.parseFrameStep(frameInput.value);setFrames(value);status(value+' '+frameWord(value));}catch(error){frameInput.setAttribute('aria-invalid','true');status(t('The calculation must give 1–1000000 whole frames.','Результат должен быть целым числом от 1 до 1000000 кадров.'),true);}});
     $('frame-minus').onclick=e=>setFrames(prefs.frames-(e.shiftKey?10:1));$('frame-plus').onclick=e=>setFrames(prefs.frames+(e.shiftKey?10:1));$('frame-slider').oninput=e=>setFrames(Number(e.target.value));$('frames').addEventListener('wheel',e=>{if(document.activeElement!==$('frames')||busy)return;e.preventDefault();setFrames(prefs.frames+(e.deltaY<0?1:-1)*(e.shiftKey?10:1));},{passive:false});$('half-second').onclick=()=>setFrames(Math.max(1,Math.round(.5/state.frameDuration)));$('one-second').onclick=()=>setFrames(Math.max(1,Math.round(1/state.frameDuration)));
     $('preview-plan').onclick=()=>openMenu($('preview-plan'),previewCommands.map(c=>({id:c.choice||c.id,label:commandLabel(c),disabled:!available(c),onClick:()=>runCommand(c.id,true)})));
     $('close-dialog').onclick=closeDialog;$('overlay').onclick=e=>{if(e.target===$('overlay'))closeDialog();};$('import-file').onchange=async e=>{const file=e.target.files[0];if(!file)return;try{if(file.size>20000)throw Error(t('Settings file exceeds 20 KB.','Файл настроек превышает 20 KB.'));prefs=M.validate(JSON.parse(await file.text()));quickDraft=null;applyAppearance();persist();renderPresets();render();showSettings();}catch(error){preferenceError(error.message);}finally{e.target.value='';}};

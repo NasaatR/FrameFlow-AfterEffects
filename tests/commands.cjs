@@ -24,7 +24,7 @@ function workspace(){
   return {dir,cleanup(){fs.rmSync(dir,{recursive:true,force:true});}};
 }
 const newModule='registerPlan("alignTail", function (c,r) {\n schema(r,"|op||token||scope||preview|");\n return FFHost.prepareArrange({scope:r.scope,action:"alignOut",order:"top",anchor:"cursor",frames:1});\n}, false);\n';
-function compiled(dir){return '$.global.FrameFlowCEP=(function(){\n'+fs.readFileSync(path.join(root,'extension/js/i18n.js'),'utf8')+'\n'+fs.readFileSync(path.join(root,'src/core.jsxinc'),'utf8')+'\n'+compileHost(dir)+'\nreturn FFCEP;}());';}
+function compiled(dir){return '$.global.FrameFlowCEP=(function(){\n'+require('../tools/runtime-sources.cjs').runtimeSources(root)+'\n'+compileHost(dir)+'\nreturn FFCEP;}());';}
 test('adding a module joins the same preview, validation, Undo and duplicate-acknowledgement lifecycle',()=>{
   const w=workspace();try{
     fs.writeFileSync(path.join(w.dir,'src/commands/align-tail.jsxinc'),newModule);const hostSource=compiled(w.dir);assert.equal(analyze(hostSource).status,'pass');const f=fixture({hostSource}),token=f.state().token;
