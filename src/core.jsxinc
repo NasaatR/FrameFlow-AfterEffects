@@ -196,8 +196,8 @@ var FFCore = (function () {
         if ((moved !== keys.length || uneven) && roving) return {times:times, moved:0, skip:"Roving: требуется равномерный перенос всех ключей свойства"};
         for (i = 0; i < times.length; i++) {
             if (!isFinite(times[i]) || Math.abs(times[i]) > 10800) return {error:"Время ключа вне границ AE",moved:0};
-            if (i > 0 && Math.abs(times[i] - times[i-1]) <= epsilon) return {error:"Коллизия ключей: операция заблокирована",moved:0};
-            if (i > 0 && times[i] < times[i-1]) return {error:"Меняется порядок ключей: операция заблокирована",moved:0};
+            if (i > 0 && Math.abs(times[i] - times[i-1]) <= epsilon) return {error:"Коллизия ключей: операция заблокирована",conflict:i,times:times,moved:0};
+            if (i > 0 && times[i] < times[i-1]) return {error:"Меняется порядок ключей: операция заблокирована",conflict:i,times:times,moved:0};
         }
         return {times:times, moved:moved};
     }
@@ -246,7 +246,7 @@ var FFCore = (function () {
         parseFavorites:favorites, defaults:defaults, parseSettings:parseSettings, encodeSettings:encodeSettings};
 }());
 
-/* FrameFlow AE 2.4.11. AE adapter; native values never pass through JSON. */
+/* FrameFlow AE 2.4.12. AE adapter; native values never pass through JSON. */
 var FFHost = (function () {
     var LIMITS = {properties:20000, keys:50000, reportLines:300, textCharacters:2000};
     var ROOTS = ["ADBE Transform Group", "ADBE Mask Parade", "ADBE Effect Parade", "ADBE MTrackers",
@@ -560,7 +560,7 @@ var FFHost = (function () {
     }
     function policySkip(plan, subject, reason) {
         plan.policySkipped = (plan.policySkipped || 0)+1;
-        plan.skips.push(subject+": "+reason);
+        plan.skips.push(subject ? subject+": "+reason : reason);
     }
     function excludedLayer(layer, request) {
         if (request.skipLocked && layer.locked) return "Excluded locked layer";
@@ -826,6 +826,23 @@ var FFHost = (function () {
         }
         return result;
     }
+    function keyPlanError(plan, info, keys, layer, path) {
+        var label = layer ? labelFor(layer,path) : "Маркеры композиции";
+        var message = label+": "+info.error, i = info.conflict;
+        function time(value) { return Number(value.toFixed(9))+" s"; }
+        if (i) {
+            message += " [#"+i+" "+time(keys[i-1].time)+" → "+time(info.times[i-1])+
+                "; #"+(i+1)+" "+time(keys[i].time)+" → "+time(info.times[i])+"]";
+        }
+        var error = new Error(message), r = plan.request;
+        // A nested instance whose source is also being edited cannot be preserved by dropping its own edits.
+        if (i && layer && !r.operation && !(r.nestedInstances && r.nestedInstances["l"+layer.id])) {
+            plan.conflictLayers = (plan.conflictLayers || 0)+1;
+            if (r.skipKeyConflicts) { error.skipKeyConflict = true; return error; }
+        }
+        plan.errors.push(message);
+        return error;
+    }
     function prepareKeys(request,context) {
         var comp = context.comp, layers = selectedLayers(comp,request.scope,request.layerIds), selectedOnly = request.mode === "selectedKeys";
         var plan = {comp:comp,context:context,request:request,changes:[],skips:[],errors:[],notes:[],layerCount:layers.length,mediaLimits:[]};
@@ -852,7 +869,7 @@ var FFHost = (function () {
                 if ((!selectedOnly || s.keys[k].selected) && s.keys[k].value.protectedRegion && FFCore.inRegion(s.keys[k].time,{region:request.region,cti:context.cti})) throw new Error("Protected Region: перенос маркера пропущен");
             }
             kp = FFCore.keyPlan(s.keys,context,request,selectedOnly,s.marker);
-            if (kp.error) { plan.errors.push(labelFor(owner || {index:"comp",id:comp.id},propertyPath)+": "+kp.error); throw new Error(kp.error); }
+            if (kp.error) throw keyPlanError(plan,kp,s.keys,owner,propertyPath);
             if (kp.skip && request.skipUnsupported) { policySkip(plan,owner ? labelFor(owner,propertyPath) : "Composition markers",kp.skip); return null; }
             if (kp.skip) throw new Error(kp.skip);
             if (!kp.moved) return null;
@@ -879,7 +896,10 @@ var FFHost = (function () {
                     p = props[j]; if (!p.numKeys) continue;
                     path = pathOf(p,layer); p = entry(p,layer,path); if (p) pending.push(p);
                 }
-            } catch (captureError) { failed = errorInfo(captureError).message; }
+            } catch (captureError) {
+                failed = errorInfo(captureError).message;
+                if (captureError && captureError.skipKeyConflict) { policySkip(plan,null,failed); continue; }
+            }
             if (failed) plan.skips.push(labelFor(layer,[])+": весь слой пропущен — "+failed);
             else for (j = 0; j < pending.length; j++) plan.changes.push(pending[j]);
         }
@@ -999,14 +1019,14 @@ var FFHost = (function () {
         function relevant(prop) {
             return regionHasKeys(prop,request.region,context.cti);
         }
-        function partial(prop) {
+        function partial(prop,path) {
             var snap = snapshotProperty(prop), info;
             addCount(snap.keys.length);
             if (snap.marker) for (var m = 0; m < snap.keys.length; m++) {
                 if (snap.keys[m].value.protectedRegion && FFCore.inRegion(snap.keys[m].time,{region:request.region,cti:context.cti})) throw new Error("Protected Region: перенос этой части слоя пропущен");
             }
             info = FFCore.keyPlan(snap.keys,context,request,false,snap.marker);
-            if (info.error) { plan.errors.push("Layer #"+(layer ? layer.index : "comp")+": "+info.error); throw new Error(info.error); }
+            if (info.error) throw keyPlanError(plan,info,snap.keys,layer,path);
             if (info.skip && request.skipUnsupported) { policySkip(plan,layer ? labelFor(layer,pathOf(prop,layer)) : "Composition markers",info.skip); return {snapshot:snap,times:originalTimes(snap),moved:0}; }
             if (info.skip) throw new Error(info.skip);
             return {snapshot:snap,times:info.times,moved:info.moved};
@@ -1094,7 +1114,7 @@ var FFHost = (function () {
                         policy = excludedProperty(p,layer,path,request);
                         if (policy) { policySkip(plan,labelFor(layer,path),policy); continue; }
                         policy = unsupportedProperty(p,path); if (policy) throw new Error(policy);
-                        kp = partial(p);
+                        kp = partial(p,path);
                         if (!interval && !kp.moved) continue;
                     }
                     entries.push({path:path,snapshot:kp.snapshot,times:kp.times,moved:kp.moved}); moved += kp.moved;
@@ -1103,7 +1123,10 @@ var FFHost = (function () {
                     if (lp.outPoint-lp.inPoint < context.frameDuration*(1-0.000001)) throw new Error("Keep at least one frame of the layer.");
                     verifyEdgeKeyVisibility(layer,lp,entries,props,context.frameDuration*0.000001);
                 }
-            } catch (captureError) { failed = errorInfo(captureError).message; }
+            } catch (captureError) {
+                failed = errorInfo(captureError).message;
+                if (captureError && captureError.skipKeyConflict) { policySkip(plan,null,failed); continue; }
+            }
             if (failed) { plan.skips.push(labelFor(layer,[])+": весь слой пропущен — "+failed); continue; }
             if (keysOnly) {
                 for (j = 0; j < entries.length; j++) {
@@ -1120,7 +1143,7 @@ var FFHost = (function () {
             layer = null;
             try {
                 guardInterval(comp.markerProperty);
-                kp = partial(comp.markerProperty);
+                kp = partial(comp.markerProperty,[]);
                 if (kp.moved) plan.changes.push({kind:"property",layer:null,path:[],snapshot:kp.snapshot,times:kp.times,moved:kp.moved,label:"Маркеры композиции"});
             } catch (markerError) { plan.skips.push("Маркеры композиции: "+errorInfo(markerError).message); }
         }
@@ -1276,7 +1299,7 @@ var FFHost = (function () {
         if (errors.length) throw new Error(errors.join("\n"));
     }
     function applyPlan(plan) {
-        var result = {ok:false,partial:false,selectionRestored:null,changed:0,changedLayers:0,movedKeys:0,attempted:0,restored:false,recoveryErrors:[],skipped:plan.skips.length,mediaSkipped:plan.mediaLimits ? plan.mediaLimits.length : 0,protectedSkipped:plan.protectedSkipped || 0};
+        var result = {ok:false,partial:false,selectionRestored:null,changed:0,changedLayers:0,movedKeys:0,attempted:0,restored:false,recoveryErrors:[],skipped:plan.skips.length,mediaSkipped:plan.mediaLimits ? plan.mediaLimits.length : 0,protectedSkipped:plan.protectedSkipped || 0,conflictSkipped:plan.request.skipKeyConflicts ? plan.conflictLayers || 0 : 0};
         var phase = "preflight", currentChange = null, layerSelection = null, recovering = false;
         var opened = false, touched = [], tolerance, written, i, j, c, p, entry;
         function useTiming(change) {
@@ -1312,7 +1335,7 @@ var FFHost = (function () {
                 }
                 else verifyProperty(target(c,plan.comp),c.snapshot,originalTimes(c.snapshot),tolerance);
             }
-            app.beginUndoGroup(plan.arrangement ? "FrameFlow AE 2.4.11 — "+plan.arrangement.action : plan.request.operation === "closeGap" ? "FrameFlow AE 2.4.11 — Убрать паузу" : "FrameFlow AE 2.4.11 — Time Offset"); opened = true;
+            app.beginUndoGroup(plan.arrangement ? "FrameFlow AE 2.4.12 — "+plan.arrangement.action : plan.request.operation === "closeGap" ? "FrameFlow AE 2.4.12 — Убрать паузу" : "FrameFlow AE 2.4.12 — Time Offset"); opened = true;
             for (i = 0; i < plan.changes.length; i++) {
                 phase = "apply"; c = plan.changes[i]; currentChange = c; useTiming(c); touched.push(c); result.attempted++;
                 if (c.kind === "layer") {
@@ -1394,7 +1417,7 @@ var FFHost = (function () {
         return result;
     }
     function environment() {
-        var lines = ["FrameFlow AE 2.4.11", "Дата: " + new Date().toString()];
+        var lines = ["FrameFlow AE 2.4.12", "Дата: " + new Date().toString()];
         function read(label,fn) { try { lines.push(label+": "+fn()); } catch (ignored) { lines.push(label+": неизвестно"); } }
         read("AE",function(){return app.version;}); read("Build",function(){return app.buildNumber;});
         read("OS",function(){return $.os;}); read("ExtendScript",function(){return $.version;});

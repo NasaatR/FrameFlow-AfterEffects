@@ -1,5 +1,9 @@
 # FrameFlow status
 
+## 2.4.12
+
+A Before +5 at frame 53 in a 24 fps composition hit two key-order conflicts. The default strict operation stopped before writing. A fresh preview can omit conflicting layers for this operation, preserving their bounds, keys and markers. The report identifies both original and proposed key times. Other blockers continue to block. Native validation remains pending.
+
 ## 2.4.11
 
 AE 27.0x78 kept an unremapped 20 s precomp instance’s Out at 20 s when the plan requested 20 s + 5 frames at 24 fps. Finite precomp handles now use the same skip or stop policy as finite footage. Covered by a clamp-simulating test and both policy branches. Native validation on the reported composition is pending.

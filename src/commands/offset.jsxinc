@@ -1,7 +1,7 @@
 /* Plan-only handler; included inside the private CEP dispatcher at build time. */
 registerPlan("offset", function (c,r) {
     var request;
-    schema(r, "|op||token||ids||scope||deltaFrames||mode||frames||region||direction||compMarkers||mediaPolicy||preview||depth||labelIds||labelFilter||skipLocked||skipDisabled||skipUnsupported||skipProtected|");
+    schema(r, "|op||token||ids||scope||deltaFrames||mode||frames||region||direction||compMarkers||mediaPolicy||preview||depth||labelIds||labelFilter||skipLocked||skipDisabled||skipUnsupported||skipProtected||skipKeyConflicts|");
     if (!FFCore.validMode(r.mode)) fail("Режим не распознан."); FFCore.parseFrames(String(r.frames));
     if (r.region !== "before" && r.region !== "after") fail("Сторона не распознана.");
     if (r.direction !== 1 && r.direction !== -1) fail("Направление не распознано."); bool(r.compMarkers);
@@ -15,6 +15,8 @@ registerPlan("offset", function (c,r) {
     request.mediaPolicy = r.mediaPolicy || "stop";
     request.frames = r.frames; request.strict = true; request.compMarkers = r.compMarkers;
     FFHost.offsetOptions(r,request);
+    if (own(r,"skipKeyConflicts")) request.skipKeyConflicts = bool(r.skipKeyConflicts);
+    if (request.skipKeyConflicts && r.preview !== true) fail("Skipping conflicting layers requires a preview.");
     if (request.mode === "edges" && r.preview !== true) fail("In/Out + Keys requires a preview.");
     request.depth = own(r,"depth") ? number(r.depth,-1,1000,true) : 0;
     FFMarkerReference.attach(c,request,r.preview);

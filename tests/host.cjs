@@ -124,7 +124,7 @@ test('insert blocks duration markers crossing the insertion point before all wri
 test('remove blocks point markers in cut and duration markers overlapping either edge',()=>{for(const entries of [[[2.25]],[[1,1.25]],[[2.4,1]]]){const f=animationInterval(),m=markerProperty(f,entries);f.comp.markerProperty=m.p;const writes=f.writes(),r=interval(f,{action:'remove',compMarkers:true,crossing:'retime'});assert.equal(r.data.preview.blocked,true);assert.equal(f.writes(),writes);assert.equal(f.groups(),0);}});
 test('new composition markers after interval preview invalidate the plan without a write',()=>{const f=animationInterval(),m=markerProperty(f,[]);f.comp.markerProperty=m.p;const writes=f.writes(),r=interval(f,{compMarkers:true});assert.equal(r.data.preview.blocked,false);m.keys.push({time:3,selected:false,value:{comment:'new',duration:0,getParameters(){return {};}}});const a=f.call({op:'applyPreview',token:r.data.state.token,previewId:r.data.preview.id});assert.equal(a.ok,true);assert.ok(a.data.failure);assert.equal(f.writes(),writes);});
 test('interval later-layer movement retains native audio, parent and matte relationships',()=>{const f=animationInterval(),l=f.comp.items[1],parent=f.comp.items[0];l.hasAudio=true;l.parent=parent;l.hasTrackMatte=true;l.trackMatteLayer=parent;const original=l.keys.map(k=>k.time),r=interval(f);const a=f.call({op:'applyPreview',token:r.data.state.token,previewId:r.data.preview.id});assert.equal(a.ok,true);assert.equal(a.data.failure,undefined);assert.equal(l.inPoint,7.5);assert.equal(l.parent,parent);assert.equal(l.trackMatteLayer,parent);assert.deepEqual(l.keys.map(k=>k.time),original.map(t=>t+.5));});
-test('English diagnostics preserve artist-authored names and reject unknown language',()=>{const f=fixture();f.comp.name='Маркеры композиции';f.comp.items[0].name='слой';const r=f.raw(JSON.stringify({id:'english:1',version:'2.4.11',language:'en',data:{op:'read'}}));assert.equal(r.ok,true);assert.equal(r.data.state.name,'Маркеры композиции');assert.equal(r.data.state.layers[0].name,'слой');const bad=f.raw(JSON.stringify({id:'english:2',version:'2.4.11',language:'fr',data:{op:'read'}}));assert.equal(bad.ok,false);assert.equal(f.writes(),0);});
+test('English diagnostics preserve artist-authored names and reject unknown language',()=>{const f=fixture();f.comp.name='Маркеры композиции';f.comp.items[0].name='слой';const r=f.raw(JSON.stringify({id:'english:1',version:'2.4.12',language:'en',data:{op:'read'}}));assert.equal(r.ok,true);assert.equal(r.data.state.name,'Маркеры композиции');assert.equal(r.data.state.layers[0].name,'слой');const bad=f.raw(JSON.stringify({id:'english:2',version:'2.4.12',language:'fr',data:{op:'read'}}));assert.equal(bad.ok,false);assert.equal(f.writes(),0);});
 
 
 for(const region of ['before','after'])for(const preview of [false,true]){
@@ -389,4 +389,52 @@ test('Before -5 checks the head of a precomp, while shortening and whole-layer t
   assert.equal(move.result.mediaSkipped,0);
   assert.equal(edge.outPoint,11.25+5/24);
   assert.equal(source.duration,20);
+});
+
+test('Before +5 at frame 53 can preview skipping two conflicting layers, then apply the same step to the others',()=>{
+  const f=fixture(),first=f.comp.layer(1),second=f.comp.layer(2),safe=f.addLayer(0,8);
+  f.comp.time=53/24;f.comp.duration=8;
+  for (const layer of [first,second]) {
+    layer.keys[0].time=50/24;layer.keys[1].time=54/24;layer.keys[2].time=80/24;
+  }
+  safe.keys[0].time=1/24;safe.keys[1].time=20/24;safe.keys[2].time=30/24;
+  const original=[remember(first),remember(second)], writes=f.writes();
+  const request={mode:'offset',region:'before',direction:1,frames:5,mediaPolicy:'skip'};
+  const blocked=timing(f,request).data;
+  assert.equal(blocked.failure.attempted,0);
+  assert.equal(blocked.preview.blocked,true);
+  assert.equal(blocked.preview.id,null);
+  assert.equal(blocked.preview.counts.conflictLayers,2);
+  assert.match(blocked.report,/ADBE Opacity.*#1 2\.083333333 s → 2\.291666667 s; #2 2\.25 s → 2\.25 s/);
+  assert.match(timing(f,{...request,skipKeyConflicts:true}).error.message,/requires a preview/);
+
+  const retry=timing(f,{...request,preview:true,skipKeyConflicts:true}).data.preview;
+  assert.equal(retry.blocked,false);
+  assert.equal(retry.counts.conflictLayers,2);
+  assert.deepEqual(retry.targets.map(target=>target.layerId),[safe.id]);
+  assert.equal(f.writes(),writes);
+  assert.equal(f.groups(),0);
+  const result=applyPreview(f,retry).data;
+  assert.equal(result.result?.ok,true,result.report);
+  assert.equal(result.result.conflictSkipped,2);
+  assert.equal(result.warning,true);
+  assert.deepEqual([remember(first),remember(second)],original);
+  assert.equal(safe.inPoint,5*f.comp.frameDuration);
+  assert.equal(f.groups(),1);
+  assert.equal(f.undo(),0);
+});
+
+test('the one-time skip does not bypass locked targets or composition-marker collisions',()=>{
+  for(const blockedBy of ['locked','compositionMarkers']){
+    const f=fixture(),first=f.comp.layer(1);
+    f.comp.time=53/24;
+    first.keys[0].time=50/24;first.keys[1].time=54/24;first.keys[2].time=80/24;
+    if(blockedBy==='locked')f.comp.layer(2).locked=true;
+    else f.comp.markerProperty=markerProperty(f,[[50/24],[54/24]]).p;
+    const r=timing(f,{mode:'keys',frames:5,region:'before',direction:1,compMarkers:blockedBy==='compositionMarkers',
+      preview:true,skipKeyConflicts:true}).data.preview;
+    assert.equal(r.counts.conflictLayers,1);
+    assert.equal(r.blocked,true);
+    assert.equal(f.writes(),0);
+  }
 });

@@ -1,16 +1,18 @@
-# FrameFlow AE 2.4.11
+# FrameFlow AE 2.4.12
 
 A compact CEP 12 panel for timing commands around the After Effects playhead.
 
 **[Инструкция на русском](README_RU.md)** · [Changelog](CHANGELOG.md)
 
-The 2.4.11 installable archive is distributed separately. Quit After Effects, extract the complete ZIP and run `install/Install-Windows.cmd` or `install/Install-macOS.command`. Launch AE and open **Window → Extensions (Legacy) → FrameFlow 2.4**. Target: AE 25.x–27.x / CEP 12. The installer backs up the previous extension and enables unsigned CEP 12 panels for the current account. This is a source distribution, not a signed ZXP or GitHub Release. Installed users need no Node, Python, server or network access from the panel.
+The 2.4.12 installable archive is distributed separately. Quit After Effects, extract the complete ZIP and run `install/Install-Windows.cmd` or `install/Install-macOS.command`. Launch AE and open **Window → Extensions (Legacy) → FrameFlow 2.4**. Target: AE 25.x–27.x / CEP 12. The installer backs up the previous extension and enables unsigned CEP 12 panels for the current account. This is a source distribution, not a signed ZXP or GitHub Release. Installed users need no Node, Python, server or network access from the panel.
 
 ## Workflow
 
 The panel starts in **Auto / Layers and Keys**, including after upgrading. Auto uses the selected AE layers, or all composition layers when none are selected. Explicit Selected never expands scope. Enable “Remember scope and mode” in settings to retain a different startup context. Frame step, presets and appearance remain saved independently.
 
 Choose frames with presets, stepper, Shift, wheel, slider or half/one-second shortcuts. Use **Before − / Before + / After − / After +**. Minus moves earlier; plus moves later. In Layers and Keys, layers entirely on that side move together with their keys; on a crossing layer with keys on both sides, only the keys on the chosen side move. Other crossing layers retain the edge offset. A key at the cursor belongs to After. Each command reads current CTI and selection before planning, then checks the host snapshot again before writing. Close Gap uses the same scope independently of step and mode. The **Plan** menu previews any of the four directions or Close Gap without writing. Apply executes that captured plan, with native snapshot checks and a two-minute lifetime. Undo/Redo is native to AE.
+
+**Key conflicts:** if an offset would collide or reorder keys, the blocked plan shows both key times. Choose **Preview without conflicting layers**, then **Apply Plan** to move the remaining eligible targets by the original step. This is a one-time choice.
 
 **Footage and precomp source limits:** by default, a crossing layer requiring unavailable source frames stays completely unchanged, including all its keys. Other valid targets proceed. The status, preview, report and event history show the number of layers without source handles. Select “Cancel everything” in settings for the previous all-or-nothing media policy. Relevant locks, unsupported partial-key targets, collisions and runtime verification failures still block or recover the operation. The panel does not extend footage with invented frames.
 
@@ -67,7 +69,7 @@ The 11 existing actions use one validated catalogue, shared button/menu componen
 
 Maintainer tools need Node >=20 with Acorn 8.17.0 or bundled Acorn through `--expose-internals`, Python 3 and Bash. Read-only CI runs on main pushes and PRs, checks Chromium layout/interactions with a simulated AE transport, runs packaging and uploads a separate checked build plus browser screenshots. Browser tooling uses isolated Playwright 1.62.1 and is not part of the installed panel. Issued ZIPs remain unchanged under `downloads/`.
 
-The user reports 2.1.1 is working in AE 25.6.4x3. The 2.4.2 manifest excluded After Effects 2027 (27.0). The updated range is checked during packaging. The finite-media and precomp failures are reproduced in the regression suite. **2.4.11 host behavior, native Undo/Redo, clipboard and docking require an actual AE smoke test.** DOM tests simulate wiring. The package records which browser checks were run and ties any Chromium results to the exercised source files. See [verification](VERIFICATION.json) and [smoke test](docs/AE_SMOKE_TEST_RU.md).
+The user reports 2.1.1 is working in AE 25.6.4x3. The 2.4.2 manifest excluded After Effects 2027 (27.0). The updated range is checked during packaging. The finite-media and precomp failures are reproduced in the regression suite. **2.4.12 host behavior, native Undo/Redo, clipboard and docking require an actual AE smoke test.** DOM tests simulate wiring. The package records which browser checks were run and ties any Chromium results to the exercised source files. See [verification](VERIFICATION.json) and [smoke test](docs/AE_SMOKE_TEST_RU.md).
 
 
 ## Roadmap and updates

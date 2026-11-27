@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.4.12
+
+- Show the property and before/after times of both keys when an offset would collide or change key order.
+- Offer a fresh, one-time preview without conflicting layers when other targets can still move. Apply verifies the same plan and leaves each omitted layer intact.
+
 ## 2.4.11
 
 - Check the available source span of precomps before extending their In or Out. The existing source limit policy keeps exhausted instances and their keys in place, or blocks before the first write.

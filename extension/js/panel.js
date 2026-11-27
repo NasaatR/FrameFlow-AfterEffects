@@ -58,7 +58,7 @@
     $('offset-context').disabled=busy;
     $('empty-text').hidden=!!state;$('status').textContent=D(statusRaw);$('status').title=D(statusRaw);
   }
-  async function request(data,quiet=false,expectedComp=null){
+  async function request(data,quiet=false,expectedComp=null,expectedToken=null){
     if(disposed||busy)return null;
     if(data.op!=='read'&&!ready()){status(t('Click Refresh to connect to AE.','Нажмите «Обновить» для подключения к AE.'),true);return null;}
     const previewRevision=dialogRevision;closeMenu();busy=true;clearTimeout(pollTimer);render();if(!quiet)status(data.op==='read'?t('Reading AE…','Читаем AE…'):t('Checking AE…','Проверяем AE…'));
@@ -66,6 +66,7 @@
     try{
       const fresh=await bridge.call({op:'read'});if(disposed)return null;accept(fresh.state);readCompleted=true;connectionFailed=false;readFailures=0;
       if(expectedComp!==null&&state.compId!==expectedComp)throw Error(t('Composition changed. Reopen this action in the intended composition.','Композиция сменилась. Откройте действие заново в нужной композиции.'));
+      if(expectedToken!==null&&state.token!==expectedToken)throw Error(t('The timeline changed. Start a new preview.','Таймлайн изменился. Откройте новый план.'));
       // A reference can change in AE after the last panel refresh.
       if(data.op==='offset'&&state.markerReference)data.preview=true;
       const result=data.op==='read'?fresh:await bridge.call(Object.assign({},data,{token:state.token}));if(disposed)return null;
@@ -77,7 +78,13 @@
         lastReport=result.report||JSON.stringify(failure,null,2);log(data.op,detail);status(detail,true);
       }
       else if(!quiet){status(result.message||(isDemo?t('Demo · AE disconnected','Демо · AE не подключён'):t('Synced with AE','Синхронизировано с AE')),false,result.warning);log(data.op,result.message||t('confirmed','подтверждено'));}
-      if(data.preview&&previewRevision===dialogRevision)showPreview(result);return result;
+      if((data.preview||result.preview)&&previewRevision===dialogRevision){
+        const retry=data.op==='offset'&&!data.skipKeyConflicts
+          ? {request:Object.assign({},data,{preview:true,skipKeyConflicts:true}),compId:state.compId,token:state.token}
+          : null;
+        showPreview(result,retry);
+      }
+      return result;
     }catch(cause){if(disposed)return null;const e=cause&&cause.message?cause:new Error(typeof cause==='string'&&cause!=='undefined'?cause:t('AE returned no error description.','AE не передал описание ошибки.'));connectionFailed=!!(bridge.needsReconnect||bridge.uncertain);if(!readCompleted){readFailures++;state=null;}$('empty-text').textContent=D(e.message);status(e.message,true);log(data.op,(e.code?e.code+' / '+e.stage+' · ':'')+e.message);lastReport=D(e.message)+(e.code?'\nCode: '+e.code+'\nStage: '+e.stage+'\nRequest: '+data.op:'')+(e.host?'\n'+JSON.stringify(e.host,null,2):'');return null;}
     finally{busy=false;render();schedulePoll();}
   }
@@ -196,10 +203,15 @@
     async function copy(){field.focus();field.select();try{if(document.execCommand('copy')){copied(t('Copied','Скопировано'));return;}}catch(e){}try{if(!navigator.clipboard||typeof navigator.clipboard.writeText!=='function')throw Error('copy');await navigator.clipboard.writeText(field.value);copied(t('Copied','Скопировано'));}catch(e){copied(t('Copy blocked. Text selected: Ctrl/Cmd+C.','Копирование заблокировано. Текст выделен: Ctrl/Cmd+C.'));}}
     $('copy-report').onclick=copy;$('export-report').onclick=()=>download('FrameFlow-'+M.VERSION+'-report.txt',field.value);if(autoCopy)copy();
   }
-  function showPreview(result){
+  function showPreview(result,retry=null){
     const p=result.preview;if(!p){openDialog(t('Preview','Предпросмотр'),'<p class="plan-message">'+(isDemo?t('Interface demo. Connect After Effects to calculate a real plan.','Демо интерфейса. Подключите After Effects для расчёта плана.'):t('AE returned no plan. Try again.','AE не вернул план. Повторите проверку.'))+'</p>');return;}
     const time=v=>M.timecode(v,p.frameDuration,p.displayStart),delta=(p.delta>0?'+':'−')+Number(Math.abs(p.delta/p.frameDuration).toFixed(3))+' '+frameWord(p.frames),kind={layer:t('Whole layer','Слой целиком'),edge:t('Edge + keys','Край и ключи'),property:t('Keys','Ключи')};
     const operation=p.arrangement?arrangeNames()[p.arrangement.action]:p.operation==='gap'?t('Close Gap','Убрать паузу'):p.operation==='insertTime'?t('Insert Time','Вставить время'):p.operation==='removeTime'?t('Remove Time','Удалить время'):(p.region==='before'?t('Before cursor','До курсора'):t('After cursor','После курсора'))+' · '+delta;
+    const canSkip=retry&&p.blocked&&p.counts.conflictLayers&&p.counts.changes;
+    const skipAction=canSkip?'<button id="preview-without-conflicts" class="primary-button">'+
+      t('Preview without conflicting layers','План без конфликтующих слоёв')+'</button>':'';
+    const skippedConflicts=!retry&&p.counts.conflictLayers
+      ?'<p class="plan-message warning">'+t('Conflicting layers kept: ','Конфликтующих слоёв сохранено: ')+p.counts.conflictLayers+'</p>':'';
     const rows=p.targets.map(target=>{
       const fd=target.frameDuration||p.frameDuration,localTime=v=>M.timecode(v,fd,target.displayStart===undefined?p.displayStart:target.displayStart);
       const targetDelta=typeof target.delta==='number'?target.delta:p.delta;
@@ -221,7 +233,12 @@
     const marker=p.markerReference?'<p class="plan-message">'+t('Marker reference · ','Опорный слой · ')+esc(p.markerReference.name)+' ('+p.markerReference.count+')</p>':'';
     const arrangement=p.arrangement?'<p class="plan-message">'+esc(orderNames()[p.arrangement.order])+' · '+(p.arrangement.anchor==='cursor'?t('AE Cursor','Курсор AE'):t('First Layer','Первый слой'))+(p.arrangement.action==='sequence'||p.arrangement.action==='stagger'?' · '+p.arrangement.frames+' '+frameWord(p.arrangement.frames):'')+'</p>':'';
     const interval=p.interval?'<p class="plan-message">'+esc((p.operation==='removeTime'?'['+time(p.interval.start)+' → '+time(p.interval.end)+')':time(p.interval.start)+' · '+delta)+' · '+(p.interval.crossing==='keep'?t('Keep crossing layers','Оставить пересекающие слои'):t('Retime crossing animation','Изменить тайминг анимации')))+'. '+t('Composition duration unchanged. No layers or keys are deleted.','Длительность композиции не меняется. Слои и ключи не удаляются.')+'</p>':'';
-    openDialog(t('Change Plan','План изменений'),'<p class="plan-context"><strong>'+esc(operation)+'</strong><br>'+esc(time(p.cti))+' · '+esc(scopeNames()[p.scope])+'</p>'+arrangement+interval+nested+marker+'<div class="plan-summary"><span><strong>'+p.counts.layers+'</strong> '+word(p.counts.layers,'layer','layers','слой','слоя','слоёв')+'</span><span><strong>'+p.counts.keys+'</strong> '+word(p.counts.keys,'key','keys','ключ','ключа','ключей')+'</span><span><strong>'+p.counts.skipped+'</strong> '+t('skipped','пропусков')+'</span>'+(p.counts.keptCrossing?'<span><strong>'+p.counts.keptCrossing+'</strong> '+t('kept','оставлено')+'</span>':'')+'</div>'+(p.blocked?'<p class="plan-message error">'+t('Writing blocked. See the reasons below.','Запись заблокирована. Причины ниже.')+'</p>':'<p class="plan-message">'+(p.counts.changes?t('Nothing changed yet.','Пока ничего не изменено.'):t('No matching changes. Scene stays unchanged.','Подходящих изменений нет. Сцена останется прежней.'))+'</p>')+(p.counts.mediaSkipped?'<p class="plan-message warning">'+t('Insufficient source handles: ','Без запаса исходника: ')+p.counts.mediaSkipped+'. '+t('These layers and their keys stay in place.','Эти слои и все их ключи останутся на месте.')+'</p>':'')+(p.counts.protectedSkipped?'<p class="plan-message warning">'+t('Layers kept to protect their regions: ','Слоёв сохранено для защиты зон: ')+p.counts.protectedSkipped+'</p>':'')+(p.counts.outsideComposition?'<p class="plan-message warning">'+p.counts.outsideComposition+' '+t('layers extend beyond the composition. Duration stays unchanged.','слоёв выходят за границы композиции. Длительность не меняется.')+'</p>':'')+'<div class="plan-targets">'+rows+'</div>'+(p.targetsOmitted?'<p class="note">'+t('More targets: ','Ещё целей: ')+p.targetsOmitted+'. '+t('See the report.','Подробности — в отчёте.')+'</p>':'')+(p.errors.length||p.skips.length?'<h3>'+t('Reasons & skipped targets','Причины и пропуски')+'</h3><ul class="plan-reasons">'+p.errors.concat(p.skips).map(reason=>'<li>'+esc(D(reason))+'</li>').join('')+'</ul>':'')+(p.skipsOmitted?'<p class="note">'+t('More skipped: ','Ещё пропусков: ')+p.skipsOmitted+'.</p>':'')+'<div class="plan-actions"><button id="apply-preview" class="primary-button" '+(p.blocked||!p.counts.changes||isDemo?'disabled':'')+'>'+t('Apply Plan','Применить план')+'</button><button id="plan-report" class="quiet-button">'+t('Technical Report','Технический отчёт')+'</button></div><p class="plan-footnote">'+t('Valid for 2 minutes. AE rechecks the same targets before writing. Changes require a new preview.','План действует 2 минуты. AE повторно проверит те же цели перед записью. При изменениях потребуется новая проверка.')+'</p>');
+    openDialog(t('Change Plan','План изменений'),'<p class="plan-context"><strong>'+esc(operation)+'</strong><br>'+esc(time(p.cti))+' · '+esc(scopeNames()[p.scope])+'</p>'+arrangement+interval+nested+marker+skippedConflicts+'<div class="plan-summary"><span><strong>'+p.counts.layers+'</strong> '+word(p.counts.layers,'layer','layers','слой','слоя','слоёв')+'</span><span><strong>'+p.counts.keys+'</strong> '+word(p.counts.keys,'key','keys','ключ','ключа','ключей')+'</span><span><strong>'+p.counts.skipped+'</strong> '+t('skipped','пропусков')+'</span>'+(p.counts.keptCrossing?'<span><strong>'+p.counts.keptCrossing+'</strong> '+t('kept','оставлено')+'</span>':'')+'</div>'+(p.blocked?'<p class="plan-message error">'+t('Writing blocked. See the reasons below.','Запись заблокирована. Причины ниже.')+'</p>':'<p class="plan-message">'+(p.counts.changes?t('Nothing changed yet.','Пока ничего не изменено.'):t('No matching changes. Scene stays unchanged.','Подходящих изменений нет. Сцена останется прежней.'))+'</p>')+(p.counts.mediaSkipped?'<p class="plan-message warning">'+t('Insufficient source handles: ','Без запаса исходника: ')+p.counts.mediaSkipped+'. '+t('These layers and their keys stay in place.','Эти слои и все их ключи останутся на месте.')+'</p>':'')+(p.counts.protectedSkipped?'<p class="plan-message warning">'+t('Layers kept to protect their regions: ','Слоёв сохранено для защиты зон: ')+p.counts.protectedSkipped+'</p>':'')+(p.counts.outsideComposition?'<p class="plan-message warning">'+p.counts.outsideComposition+' '+t('layers extend beyond the composition. Duration stays unchanged.','слоёв выходят за границы композиции. Длительность не меняется.')+'</p>':'')+'<div class="plan-targets">'+rows+'</div>'+(p.targetsOmitted?'<p class="note">'+t('More targets: ','Ещё целей: ')+p.targetsOmitted+'. '+t('See the report.','Подробности — в отчёте.')+'</p>':'')+(p.errors.length||p.skips.length?'<h3>'+t('Reasons & skipped targets','Причины и пропуски')+'</h3><ul class="plan-reasons">'+p.errors.concat(p.skips).map(reason=>'<li>'+esc(D(reason))+'</li>').join('')+'</ul>':'')+(p.skipsOmitted?'<p class="note">'+t('More skipped: ','Ещё пропусков: ')+p.skipsOmitted+'.</p>':'')+'<div class="plan-actions">'+skipAction+'<button id="apply-preview" class="primary-button" '+(p.blocked||!p.counts.changes||isDemo?'disabled':'')+'>'+t('Apply Plan','Применить план')+'</button><button id="plan-report" class="quiet-button">'+t('Technical Report','Технический отчёт')+'</button></div><p class="plan-footnote">'+t('Valid for 2 minutes. AE rechecks the same targets before writing. Changes require a new preview.','План действует 2 минуты. AE повторно проверит те же цели перед записью. При изменениях потребуется новая проверка.')+'</p>');
+    if(canSkip)$('preview-without-conflicts').onclick=safe(async()=>{
+      const revision=dialogRevision;
+      const result=await request(retry.request,false,retry.compId,retry.token);
+      if(!result&&revision===dialogRevision)closeDialog();
+    });
     activePreview=p;$('apply-preview').onclick=safe(()=>{const id=p.id;closeDialog();return request({op:'applyPreview',previewId:id});});$('plan-report').onclick=()=>showReport(true);
   }
   function showArrange(action,commandId){

@@ -1,6 +1,6 @@
 /* FrameFlow CEP host. Data-only RPC; no eval, command IDs, network or file writes. */
 var FFCEP = (function () {
-    var VERSION = "2.4.11", serial = 0, session = String(new Date().getTime()) + "-" + String(Math.random());
+    var VERSION = "2.4.12", serial = 0, session = String(new Date().getTime()) + "-" + String(Math.random());
     var saved = null, recent = [], busy = false, prepared = null, planSerial = 0;
     function fail(message) { throw new Error(message); }
     function own(o, k) { return Object.prototype.hasOwnProperty.call(o, k); }
@@ -309,7 +309,7 @@ var FFCEP = (function () {
             delta:plan.arrangement ? 0 : FFCore.offsetSeconds(c,r),cti:r.operation === "closeGap" || r.interval ? r.originalCTI : r.markerBinding ? plan.comp.time : c.cti,
             frameDuration:c.frameDuration,displayStart:plan.comp.displayStartTime,blocked:plan.errors.length > 0,
             counts:{layers:layers,keys:keys,properties:properties,changes:plan.changes.length,skipped:plan.skips.length,
-                outsideComposition:outside,protectedSkipped:plan.protectedSkipped || 0,mediaSkipped:plan.mediaLimits ? plan.mediaLimits.length : 0,errors:plan.errors.length,keptCrossing:plan.keptCrossing ? plan.keptCrossing.length : 0},targets:targets,
+                outsideComposition:outside,conflictLayers:plan.conflictLayers || 0,protectedSkipped:plan.protectedSkipped || 0,mediaSkipped:plan.mediaLimits ? plan.mediaLimits.length : 0,errors:plan.errors.length,keptCrossing:plan.keptCrossing ? plan.keptCrossing.length : 0},targets:targets,
             markerReference:r.markerBinding || null,nestedSources:plan.nestedSources || [],targetsOmitted:Math.max(0,plan.changes.length-targets.length),skips:plan.skips.slice(0,40),errors:plan.errors.slice(0,20),
             skipsOmitted:Math.max(0,plan.skips.length-40),gap:r.operation === "closeGap" ? {start:r.gap.start,end:r.gap.end} : null,
             interval:r.interval || null,keptTargets:plan.keptCrossing ? plan.keptCrossing.slice(0,100) : []};
@@ -396,8 +396,10 @@ var FFCEP = (function () {
             result = directEdit(c, layers, r); report = stringify(result);
         } else fail("Неизвестная операция.");
         FFTimeTools.record(c,plan,result);
+        if (!result.ok && plan && r.op === "offset" && plan.conflictLayers && plan.changes.length && result.attempted === 0)
+            return {state:snapshot(),failure:result,preview:planSummary(plan,null),report:report,message:plan.errors[0]};
         if (!result.ok) return {state:snapshot(), failure:result, report:report, message:(result.error ? result.error.message : plan && plan.errors.length ? plan.errors[0] : "Не удалось завершить проверку записи. Откройте отчёт.") + (plan && plan.errors.length && plan.skips.length ? " " + plan.skips[0] : "") + (result.partial && !result.restored ? " · Recovery not confirmed. Check the timeline before retrying." : "")};
-        return {state:snapshot(), result:result, report:report, warning:result.mediaSkipped > 0 || result.protectedSkipped > 0, message:(result.changed ? "Готово · изменений: " + result.changed : "Сцена не изменена") + (plan && (plan.request.mode === "offset" || plan.request.mode === "edges") && result.changed ? " · ключей сдвинуто: " + result.movedKeys : "") + (result.mediaSkipped ? " · без запаса: " + result.mediaSkipped : result.changed ? "" : " · подходящих целей нет") + (result.protectedSkipped ? " · protected layers kept: "+result.protectedSkipped : "")};
+        return {state:snapshot(), result:result, report:report, warning:result.mediaSkipped > 0 || result.protectedSkipped > 0 || result.conflictSkipped > 0, message:(result.changed ? "Готово · изменений: " + result.changed : "Сцена не изменена") + (plan && (plan.request.mode === "offset" || plan.request.mode === "edges") && result.changed ? " · ключей сдвинуто: " + result.movedKeys : "") + (result.mediaSkipped ? " · без запаса: " + result.mediaSkipped : result.changed ? "" : " · подходящих целей нет") + (result.protectedSkipped ? " · protected layers kept: "+result.protectedSkipped : "") + (result.conflictSkipped ? " · conflicting layers kept: "+result.conflictSkipped : "")};
     }
     // Localize diagnostics only. Artist-authored names and native values in state stay intact.
     function localized(output, language) {

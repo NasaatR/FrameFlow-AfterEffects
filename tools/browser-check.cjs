@@ -83,6 +83,27 @@ function logScreenshot(name){const data=fs.readFileSync(path.join(output,name)).
       await page.locator('#close-dialog').click();
       await menu('mode','offset');
     });
+    await check('key-order conflicts offer a checked skip at 320 px without editing the scene',async()=>{
+      const [first,second]=host.comp.items, groups=host.groups(), time=host.comp.time, out=first.outPoint, start=second.inPoint;
+      const keyTimes=host.comp.items.map(layer=>layer.keys.map(key=>key.time));
+      try{
+        host.comp.time=53/24;first.outPoint=6;second.inPoint=0;
+        first.keys.forEach((key,i)=>{key.time=[50,54,80][i]/24;});
+        second.keys.forEach((key,i)=>{key.time=[1,20,30][i]/24;});
+        await page.locator('#frames').fill('5');
+        await page.locator('#before-plus').click();
+        await page.waitForSelector('#preview-without-conflicts');
+        assert.equal(await page.locator('#apply-preview').isEnabled(),false);
+        await page.locator('#preview-without-conflicts').click();
+        await page.waitForFunction(()=>!document.getElementById('apply-preview').disabled);
+        assert.equal(host.groups(),groups);
+        assert.equal(await fits(),true);
+        await page.locator('#close-dialog').click();
+      }finally{
+        host.comp.time=time;first.outPoint=out;second.inPoint=start;
+        host.comp.items.forEach((layer,i)=>layer.keys.forEach((key,j)=>{key.time=keyTimes[i][j];}));
+      }
+    });
     const fixtureRoot=path.join(output,'extension-with-extra-commands');fs.cpSync(path.join(root,'extension'),fixtureRoot,{recursive:true});
     const extraGroups=[{id:'tools',element:'tools-menu',title:['Tools','Инструменты']}],base={op:'arrange',form:'none',title:['Align tail','Конец к курсору'],args:{action:'alignOut',order:'top',anchor:'cursor',frames:1},context:['scope'],parameters:[],preview:'required'},extraCommands=[{...base,id:'alignTailShortcut',surface:'toolbar'},{...base,id:'tailInTools',surface:'menu',group:'tools'}];
     fs.appendFileSync(path.join(fixtureRoot,'js/commands.js'),'\nwindow.FFCommands=FFCommands.create(FFCommands.groups().concat('+JSON.stringify(extraGroups)+'),FFCommands.all().concat('+JSON.stringify(extraCommands)+'));\n');

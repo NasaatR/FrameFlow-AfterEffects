@@ -116,7 +116,7 @@ test('Report opens and copies synchronously even if the browser clipboard would 
 test('Report falls back to the browser clipboard, and reports a blocked copy honestly',async()=>{for(const fail of [false,true]){let copied='';const h=harness(null,{syncCopy:false,clipboard:{writeText:async value=>{if(fail)throw Error('Denied');copied=value;}}});try{await h.settle();h.$('open-report').click();await h.settle();if(fail){assert.match(h.$('report-copy-state').textContent,/заблокировано/);assert.equal(h.document.activeElement,h.$('report-text'));}else{assert.equal(copied,h.$('report-text').value);assert.match(h.$('report-copy-state').textContent,/Скопировано/);}}finally{h.dispose();}}});
 test('settings save zero, theme and quick steps; appearance reset preserves timing choices',async()=>{const h=harness();try{await h.settle();h.document.querySelector('[data-step="24"]').click();scope(h,'all');mode(h,'keys');h.$('open-settings').focus();h.$('open-settings').click();h.$('pref-spacing').value='0';h.$('pref-spacing').dispatch('input');h.$('dialog-body').querySelectorAll('[data-pref]').find(b=>b.dataset.pref==='theme'&&b.dataset.value==='light').click();assert.equal(h.document.body.classList.contains('light'),true);h.$('quick-step-values').value='3, 7, 15';h.$('quick-step-values').dispatch('input');await new Promise(r=>setTimeout(r,250));const saved=JSON.parse([...h.storage.values()][0]);assert.equal(saved.version,4);assert.equal(saved.spacing,0);assert.deepEqual(saved.quickSteps,[3,7,15]);h.$('reset-appearance').click();h.$('close-dialog').click();assert.equal(h.document.activeElement,h.$('open-settings'));assert.equal(Number(h.$('frames').value),24);assert.equal(h.$('scope').textContent,'Все слои');assert.match(h.$('mode').textContent,/Все ключи/);assert.equal(h.document.querySelectorAll('[data-step]').length,3);}finally{h.dispose();}});
 test('menu keyboard, help and modal focus stay usable',async()=>{const h=harness();try{await h.settle();h.$('mode').focus();h.$('mode').click();assert.equal(h.$('menu').hidden,false);const first=h.document.activeElement;h.key('ArrowDown');assert.notEqual(h.document.activeElement,first);h.key('Escape');assert.equal(h.$('menu').hidden,true);assert.equal(h.document.activeElement,h.$('mode'));h.$('open-help').focus();h.$('open-help').click();assert.match(h.$('dialog-body').textContent,/Авто/);h.key('Escape');assert.equal(h.$('overlay').hidden,true);assert.equal(h.document.activeElement,h.$('open-help'));}finally{h.dispose();}});
-test('cold startup works with scoped evalFile and a detached global namespace',async()=>{const f=require('./host-fixture.cjs').fixture({unloaded:true,detachedGlobal:true}),h=harness(f);try{await h.settle();assert.equal(h.$('connection').textContent,'AE');assert.equal(f.ctx.FrameFlowCEP,undefined);assert.equal(f.ctx.$.global.FrameFlowCEP.version,'2.4.11');h.$('open-report').click();assert.match(h.copies[0],/Загрузчик: ready \/ ядро: 2\.4\.11/);assert.match(h.copies[0],/build 99/);assert.equal(f.writes(),0);}finally{h.dispose();}});
+test('cold startup works with scoped evalFile and a detached global namespace',async()=>{const f=require('./host-fixture.cjs').fixture({unloaded:true,detachedGlobal:true}),h=harness(f);try{await h.settle();assert.equal(h.$('connection').textContent,'AE');assert.equal(f.ctx.FrameFlowCEP,undefined);assert.equal(f.ctx.$.global.FrameFlowCEP.version,'2.4.12');h.$('open-report').click();assert.match(h.copies[0],/Загрузчик: ready \/ ядро: 2\.4\.12/);assert.match(h.copies[0],/build 99/);assert.equal(f.writes(),0);}finally{h.dispose();}});
 test('connection failure stops background retries; explicit Refresh restores the compact controls',async()=>{const f=hostScene();let broken=true,calls=0;const h=harness(f,{transport(script,cb){calls++;if(broken)cb('EvalScript error.');else cb(vm.runInContext(script,f.ctx));}});try{await h.settle();assert.equal(calls,1);assert.equal(h.$('after-plus').disabled,true);h.focus();await new Promise(r=>setTimeout(r,2000));assert.equal(calls,1);h.$('open-report').click();assert.match(h.copies[0],/BOOT_EMPTY/);h.$('close-dialog').click();broken=false;h.$('refresh').click();await h.settle();assert.equal(h.$('connection').textContent,'AE');assert.equal(h.$('after-plus').disabled,false);}finally{h.dispose();}});
 test('invalid frame draft survives losing focus and a metadata refresh',async()=>{const f=hostScene(),h=harness(f);try{await h.settle();h.$('frames').focus();h.$('frames').value='';h.$('frames').dispatch('input');h.$('refresh').focus();h.$('refresh').click();await h.settle();assert.equal(h.$('frames').value,'');assert.equal(h.$('after-plus').disabled,true);h.document.querySelector('[data-step="5"]').click();assert.equal(Number(h.$('frames').value),5);assert.equal(h.$('after-plus').disabled,false);}finally{h.dispose();}});
 
@@ -292,5 +292,36 @@ test('quick steps can save the current value without changing other presets or e
     assert.equal(h.$('save-quick-step').disabled,true);
     assert.equal(h.$('quick-step-values').value,'1, 2, 5, 10, 12, 24, 48, 23');
     assert.equal(f.groups(),0);
+  }finally{h.dispose();}
+});
+
+test('a direct key-order conflict offers a one-time preview without writing or persisting the skip',async()=>{
+  const f=hostScene(),first=f.comp.layer(1),second=f.comp.layer(2);
+  f.comp.time=53/24;
+  first.outPoint=6;
+  first.keys[0].time=50/24;first.keys[1].time=54/24;first.keys[2].time=80/24;
+  second.inPoint=0;
+  second.keys[0].time=1/24;second.keys[1].time=20/24;second.keys[2].time=30/24;
+  const before=JSON.stringify(first.keys),h=harness(f,{fresh:true});
+  try{
+    await h.settle();
+    h.$('frames').value='5';h.$('frames').dispatch('input');
+    h.$('before-plus').click();await h.settle();
+    assert.equal(f.groups(),0);
+    assert.equal(h.$('apply-preview').disabled,true);
+    h.$('preview-without-conflicts').click();await h.settle();
+    assert.equal(f.groups(),0);
+    assert.equal(h.$('apply-preview').disabled,false);
+    assert.equal(h.$('preview-without-conflicts'),null);
+    h.$('apply-preview').click();await h.settle();
+    assert.equal(f.groups(),1);
+    assert.equal(JSON.stringify(first.keys),before);
+    assert.equal(second.inPoint,5*f.comp.frameDuration);
+
+    h.$('before-plus').click();await h.settle();
+    f.comp.time=54/24;
+    h.$('preview-without-conflicts').click();await h.settle();
+    assert.equal(f.groups(),1);
+    assert.match(h.$('status').textContent,/timeline changed/i);
   }finally{h.dispose();}
 });
