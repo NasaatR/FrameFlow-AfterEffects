@@ -1,5 +1,9 @@
 # FrameFlow status
 
+## 2.4.10
+
+AE 27.0x78 reported a 3.255 µs time difference after a five-frame offset at 24 fps, causing a false apply failure and false rollback errors. Post-write time checks now allow up to 50 µs, capped at 1/1024 of the target composition frame, on changed fields. Preflight still compares captured times strictly. Tests reproduce the reported fractional layer and marker shift, successful rollback under quantization, and a real frame-scale mismatch. Confirm on the original AE project.
+
 ## 2.4.9
 
 Follow-up on Time Offset 1.4.4–1.8.1. Adds explicit edge-and-key shifts, direct step favorites, and protection for copied instance markers. The user’s default offset rule still moves only later keys for After when the playhead sits between keys. Native AE 27 tests remain open.

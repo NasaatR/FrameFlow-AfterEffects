@@ -246,7 +246,7 @@ var FFCore = (function () {
         parseFavorites:favorites, defaults:defaults, parseSettings:parseSettings, encodeSettings:encodeSettings};
 }());
 
-/* FrameFlow AE 2.4.9. AE adapter; native values never pass through JSON. */
+/* FrameFlow AE 2.4.10. AE adapter; native values never pass through JSON. */
 var FFHost = (function () {
     var LIMITS = {properties:20000, keys:50000, reportLines:300, textCharacters:2000};
     var ROOTS = ["ADBE Transform Group", "ADBE Mask Parade", "ADBE Effect Parade", "ADBE MTrackers",
@@ -442,13 +442,17 @@ var FFHost = (function () {
         for (i = 0; i < s.keys.length; i++) if (!preserve[i]) p.setSelectedAtKey(i+1,s.keys[i].selected);
         restoreExpressionState(p,s);
     }
-    function verifyProperty(p, s, times, timeTolerance) {
-        var now = snapshotProperty(p), i, k, actual, field, names;
+    function matchesTime(actual, expected, tolerance) {
+        return typeof actual === "number" && Math.abs(actual-expected) <= tolerance;
+    }
+    function verifyProperty(p, s, times, timeTolerance, movedTolerance) {
+        var now = snapshotProperty(p), i, k, actual, field, names, limit;
         if (now.type !== s.type || now.keys.length !== s.keys.length) throw new Error("Изменились тип или число ключей");
         if (!equal(now.expression,s.expression,0)) throw new Error("Изменился Expression");
         for (i = 0; i < s.keys.length; i++) {
             k = s.keys[i]; actual = now.keys[i];
-            if (Math.abs(actual.time-times[i]) > timeTolerance) throw new Error("Время ключа " + (i+1) + " не совпадает с расчётом");
+            limit = movedTolerance && times[i] !== k.time ? movedTolerance : timeTolerance;
+            if (!matchesTime(actual.time,times[i],limit)) throw new Error("Время ключа " + (i+1) + " не совпадает с расчётом");
             if (!equal(k.signature,actual.signature,0.000001)) throw new Error("Значение ключа " + (i+1) + " не сохранилось");
             names = ["selected"];
             if (!s.marker) {
@@ -630,12 +634,13 @@ var FFHost = (function () {
         for (i = 1; i <= p.numKeys; i++) s.keys.push({time:p.keyTime(i),selected:p.keySelected(i)});
         return s;
     }
-    function verifyNative(p, s, times, tolerance) {
+    function verifyNative(p, s, times, tolerance, movedTolerance) {
         var i;
         if (p.numKeys !== s.keys.length) throw new Error("Изменилось число нативных ключей");
         if (s.expression && (p.expression !== s.expression.text || p.expressionEnabled !== s.expression.enabled)) throw new Error("Изменился Expression");
         for (i = 0; i < times.length; i++) {
-            if (Math.abs(p.keyTime(i+1)-times[i]) > tolerance || p.keySelected(i+1) !== s.keys[i].selected) throw new Error("Нативный перенос ключей не совпал с расчётом");
+            var limit = movedTolerance && times[i] !== s.keys[i].time ? movedTolerance : tolerance;
+            if (!matchesTime(p.keyTime(i+1),times[i],limit) || p.keySelected(i+1) !== s.keys[i].selected) throw new Error("Нативный перенос ключей не совпал с расчётом");
         }
     }
     function selectedLayers(comp, scope, layerIds) {
@@ -1120,22 +1125,27 @@ var FFHost = (function () {
         return plan;
     }
     function target(change, comp) { return change.layer ? resolve(change.layer,change.path) : (change.ownerComp || comp).markerProperty; }
-    function checkLayer(change, after, tolerance) {
-        var v = after ? change.after : change.before, l = change.layer;
-        if (Math.abs(l.startTime-v.start) > tolerance || Math.abs(l.inPoint-v.inPoint) > tolerance || Math.abs(l.outPoint-v.outPoint) > tolerance) {
-            throw new Error("Границы слоя не совпадают с расчётом");
+    // Host setters can quantize subframes. Keep preflight and untouched times strict.
+    function readbackTolerance(frameDuration) { return Math.min(0.00005,frameDuration/1024); }
+    function checkLayer(change, after, tolerance, movedTolerance) {
+        var expected = after ? change.after : change.before, layer = change.layer, before = change.before;
+        function differs(actual, field) {
+            var limit = movedTolerance && change.after[field] !== before[field] ? movedTolerance : tolerance;
+            return !matchesTime(actual,expected[field],limit);
         }
+        if (differs(layer.startTime,"start") || differs(layer.inPoint,"inPoint") || differs(layer.outPoint,"outPoint"))
+            throw new Error("Границы слоя не совпадают с расчётом");
     }
-    function verifyEntry(layer, entry, times, tolerance) {
+    function verifyEntry(layer, entry, times, tolerance, movedTolerance) {
         var p = resolve(layer,entry.path);
-        if (entry.snapshot.nativeOnly) verifyNative(p,entry.snapshot,times,tolerance);
-        else verifyProperty(p,entry.snapshot,times,tolerance);
+        if (entry.snapshot.nativeOnly) verifyNative(p,entry.snapshot,times,tolerance,movedTolerance);
+        else verifyProperty(p,entry.snapshot,times,tolerance,movedTolerance);
     }
-    function verifyLayerProperties(change, after, tolerance) {
+    function verifyLayerProperties(change, after, tolerance, movedTolerance) {
         var i, entry;
         for (i = 0; i < change.properties.length; i++) {
             entry = change.properties[i];
-            verifyEntry(change.layer,entry,after ? entry.times : originalTimes(entry.snapshot),tolerance);
+            verifyEntry(change.layer,entry,after ? entry.times : originalTimes(entry.snapshot),tolerance,movedTolerance);
         }
     }
     function setBounds(layer, bounds, moveStart) {
@@ -1153,9 +1163,9 @@ var FFHost = (function () {
             entry = change.properties[j]; restoreExpressionState(resolve(change.layer,entry.path),entry.snapshot);
         }
     }
-    function verifyChange(change, comp, after, tolerance) {
-        if (change.kind !== "property") { checkLayer(change,after,tolerance); verifyLayerProperties(change,after,tolerance); }
-        else verifyProperty(target(change,comp),change.snapshot,after ? change.times : originalTimes(change.snapshot),tolerance);
+    function verifyChange(change, comp, after, tolerance, movedTolerance) {
+        if (change.kind !== "property") { checkLayer(change,after,tolerance,movedTolerance); verifyLayerProperties(change,after,tolerance,movedTolerance); }
+        else verifyProperty(target(change,comp),change.snapshot,after ? change.times : originalTimes(change.snapshot),tolerance,movedTolerance);
     }
     function diagnosticRead(fn) {
         try { var value = fn(); return typeof value === "undefined" ? "unknown" : value; }
@@ -1264,7 +1274,12 @@ var FFHost = (function () {
     function applyPlan(plan) {
         var result = {ok:false,partial:false,selectionRestored:null,changed:0,changedLayers:0,movedKeys:0,attempted:0,restored:false,recoveryErrors:[],skipped:plan.skips.length,mediaSkipped:plan.mediaLimits ? plan.mediaLimits.length : 0,protectedSkipped:plan.protectedSkipped || 0};
         var phase = "preflight", currentChange = null, layerSelection = null, recovering = false;
-        var opened = false, touched = [], tolerance = plan.context.frameDuration * 0.000001, i, j, c, p, entry;
+        var opened = false, touched = [], tolerance, written, i, j, c, p, entry;
+        function useTiming(change) {
+            var frameDuration = change.ownerComp ? change.ownerComp.frameDuration : plan.context.frameDuration;
+            tolerance = frameDuration * 0.000001;
+            written = readbackTolerance(frameDuration);
+        }
         try {
             if (plan.errors.length) throw new Error(plan.errors.join("\n"));
             if (plan.request.markerBinding) FFMarkerReference.validate(plan.comp,plan.request);
@@ -1279,7 +1294,7 @@ var FFHost = (function () {
             if (!plan.changes.length) { result.ok = true; return result; }
             phase = "captureSelection"; layerSelection = planSelection(plan); phase = "preflight";
             for (i = 0; i < plan.changes.length; i++) {
-                c = plan.changes[i]; currentChange = c;
+                c = plan.changes[i]; currentChange = c; useTiming(c);
                 validateOffsetChange(c,plan.request);
                 if (c.layer && (c.layer.locked || (c.ownerComp || plan.comp).layer(c.layer.index) !== c.layer)) throw new Error("Слой недоступен или заблокирован");
                 if (c.kind === "edge" && protectedTrim(c.layer,c.after,tolerance)) throw new Error("Protected source region changed. Preview again.");
@@ -1289,9 +1304,9 @@ var FFHost = (function () {
                 }
                 else verifyProperty(target(c,plan.comp),c.snapshot,originalTimes(c.snapshot),tolerance);
             }
-            app.beginUndoGroup(plan.arrangement ? "FrameFlow AE 2.4.9 — "+plan.arrangement.action : plan.request.operation === "closeGap" ? "FrameFlow AE 2.4.9 — Убрать паузу" : "FrameFlow AE 2.4.9 — Time Offset"); opened = true;
+            app.beginUndoGroup(plan.arrangement ? "FrameFlow AE 2.4.10 — "+plan.arrangement.action : plan.request.operation === "closeGap" ? "FrameFlow AE 2.4.10 — Убрать паузу" : "FrameFlow AE 2.4.10 — Time Offset"); opened = true;
             for (i = 0; i < plan.changes.length; i++) {
-                phase = "apply"; c = plan.changes[i]; currentChange = c; touched.push(c); result.attempted++;
+                phase = "apply"; c = plan.changes[i]; currentChange = c; useTiming(c); touched.push(c); result.attempted++;
                 if (c.kind === "layer") {
                     setBounds(c.layer,c.after,true);
                 } else if (c.kind === "edge") {
@@ -1301,41 +1316,44 @@ var FFHost = (function () {
                     setBounds(c.layer,c.after,false);
                 } else {
                     p = target(c,plan.comp); restoreProperty(p,c.snapshot,c.times,true);
-                    verifyProperty(target(c,plan.comp),c.snapshot,c.times,tolerance);
                 }
-                if (c.kind !== "property") { checkLayer(c,true,tolerance); verifyLayerProperties(c,true,tolerance); result.changedLayers++; }
+                verifyChange(c,plan.comp,true,tolerance,written);
+                if (c.kind !== "property") result.changedLayers++;
                 result.movedKeys += c.moved; result.changed++;
             }
             /* A later layer may have expressions that reference an earlier one: validate the stable final scene. */
             for (i = 0; i < touched.length; i++) { phase = "restoreExpressions"; currentChange = touched[i]; restoreChangeExpressions(touched[i],plan.comp); }
             phase = "restoreSelection"; currentChange = null; restorePlanSelection(layerSelection); result.selectionRestored = true;
-            for (i = 0; i < touched.length; i++) { phase = "finalVerify"; currentChange = touched[i]; verifyChange(touched[i],plan.comp,true,tolerance); }
+            for (i = 0; i < touched.length; i++) {
+                phase = "finalVerify"; currentChange = touched[i]; useTiming(currentChange);
+                verifyChange(currentChange,plan.comp,true,tolerance,written);
+            }
             result.partial = result.changed > 0 && result.skipped > 0;
             result.ok = true;
         } catch (e) {
             recovering = true; result.error = errorInfo(e);
             try { result.failure = captureFailure(currentChange,phase); } catch (diagnosticFailure) { /* Preserve the original failure. */ }
             for (i = touched.length-1; i >= 0; i--) {
-                c = touched[i];
+                c = touched[i]; useTiming(c);
                 if (c.kind !== "property") {
-                    try { setBounds(c.layer,c.before,c.kind === "layer"); checkLayer(c,false,tolerance); }
+                    try { setBounds(c.layer,c.before,c.kind === "layer"); checkLayer(c,false,tolerance,written); }
                     catch (boundaryRecoveryError) { result.recoveryErrors.push(c.label+": "+errorInfo(boundaryRecoveryError).message); }
                     /* One failed boundary/property recovery must not prevent the remaining recoveries. */
                     for (j = 0; j < c.properties.length; j++) {
                         entry = c.properties[j];
                         try {
-                            try { verifyEntry(c.layer,entry,originalTimes(entry.snapshot),tolerance); }
+                            try { verifyEntry(c.layer,entry,originalTimes(entry.snapshot),written); }
                             catch (needsRepair) {
                                 if (entry.snapshot.nativeOnly) throw needsRepair;
                                 restoreProperty(resolve(c.layer,entry.path),entry.snapshot,originalTimes(entry.snapshot));
                             }
-                            verifyEntry(c.layer,entry,originalTimes(entry.snapshot),tolerance);
+                            verifyEntry(c.layer,entry,originalTimes(entry.snapshot),written);
                         } catch (propertyRecoveryError) { result.recoveryErrors.push(labelFor(c.layer,entry.path)+": "+errorInfo(propertyRecoveryError).message); }
                     }
                 } else {
                     try {
                         restoreProperty(target(c,plan.comp),c.snapshot,originalTimes(c.snapshot));
-                        verifyProperty(target(c,plan.comp),c.snapshot,originalTimes(c.snapshot),tolerance);
+                        verifyProperty(target(c,plan.comp),c.snapshot,originalTimes(c.snapshot),written);
                     } catch (recoverError) { result.recoveryErrors.push(c.label+": "+errorInfo(recoverError).message); }
                 }
             }
@@ -1350,17 +1368,25 @@ var FFHost = (function () {
             }
             if (recovering) {
                 for (i = 0; i < touched.length; i++) {
-                    try { verifyChange(touched[i],plan.comp,false,tolerance); }
+                    try {
+                        c = touched[i]; useTiming(c);
+                        if (c.kind === "property") verifyProperty(target(c,plan.comp),c.snapshot,originalTimes(c.snapshot),written);
+                        else { checkLayer(c,false,tolerance,written); verifyLayerProperties(c,false,written); }
+                    }
                     catch (finalRecoveryError) { result.recoveryErrors.push(touched[i].label+": "+errorInfo(finalRecoveryError).message); }
                 }
                 if (touched.length && !result.recoveryErrors.length) { result.restored = true; result.changed = 0; result.changedLayers = 0; result.movedKeys = 0; }
+                result.partial = touched.length > 0 && !result.restored;
             }
-            if (opened) try { app.endUndoGroup(); } catch (cleanup) { result.cleanupError = errorInfo(cleanup); result.ok = false; }
+            if (opened) try { app.endUndoGroup(); } catch (cleanup) {
+                result.cleanupError = errorInfo(cleanup); result.ok = false;
+                if (touched.length && !result.restored) result.partial = true;
+            }
         }
         return result;
     }
     function environment() {
-        var lines = ["FrameFlow AE 2.4.9", "Дата: " + new Date().toString()];
+        var lines = ["FrameFlow AE 2.4.10", "Дата: " + new Date().toString()];
         function read(label,fn) { try { lines.push(label+": "+fn()); } catch (ignored) { lines.push(label+": неизвестно"); } }
         read("AE",function(){return app.version;}); read("Build",function(){return app.buildNumber;});
         read("OS",function(){return $.os;}); read("ExtendScript",function(){return $.version;});

@@ -1,6 +1,6 @@
 /* FrameFlow CEP host. Data-only RPC; no eval, command IDs, network or file writes. */
 var FFCEP = (function () {
-    var VERSION = "2.4.9", serial = 0, session = String(new Date().getTime()) + "-" + String(Math.random());
+    var VERSION = "2.4.10", serial = 0, session = String(new Date().getTime()) + "-" + String(Math.random());
     var saved = null, recent = [], busy = false, prepared = null, planSerial = 0;
     function fail(message) { throw new Error(message); }
     function own(o, k) { return Object.prototype.hasOwnProperty.call(o, k); }
@@ -396,7 +396,7 @@ var FFCEP = (function () {
             result = directEdit(c, layers, r); report = stringify(result);
         } else fail("Неизвестная операция.");
         FFTimeTools.record(c,plan,result);
-        if (!result.ok) return {state:snapshot(), failure:result, report:report, message:(result.error ? result.error.message : plan && plan.errors.length ? plan.errors[0] : "Не удалось завершить проверку записи. Откройте отчёт.") + (plan && plan.errors.length && plan.skips.length ? " " + plan.skips[0] : "")};
+        if (!result.ok) return {state:snapshot(), failure:result, report:report, message:(result.error ? result.error.message : plan && plan.errors.length ? plan.errors[0] : "Не удалось завершить проверку записи. Откройте отчёт.") + (plan && plan.errors.length && plan.skips.length ? " " + plan.skips[0] : "") + (result.partial && !result.restored ? " · Recovery not confirmed. Check the timeline before retrying." : "")};
         return {state:snapshot(), result:result, report:report, warning:result.mediaSkipped > 0 || result.protectedSkipped > 0, message:(result.changed ? "Готово · изменений: " + result.changed : "Сцена не изменена") + (plan && (plan.request.mode === "offset" || plan.request.mode === "edges") && result.changed ? " · ключей сдвинуто: " + result.movedKeys : "") + (result.mediaSkipped ? " · без запаса: " + result.mediaSkipped : result.changed ? "" : " · подходящих целей нет") + (result.protectedSkipped ? " · protected layers kept: "+result.protectedSkipped : "")};
     }
     // Localize diagnostics only. Artist-authored names and native values in state stay intact.

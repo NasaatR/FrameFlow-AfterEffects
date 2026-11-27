@@ -1,10 +1,10 @@
-# FrameFlow AE 2.4.9
+# FrameFlow AE 2.4.10
 
 Компактная CEP-панель команд времени для After Effects 25–27. [Описание версии и установки](README.md) · [План развития](ROADMAP_RU.md).
 
 ## Установка и обновление
 
-Закройте After Effects и распакуйте весь ZIP. Запустите `install/Install-Windows.cmd` или `install/Install-macOS.command`. После установки запустите AE и откройте **Window → Extensions (Legacy) → FrameFlow 2.4**. В отчёте ожидаются версия 2.4.9, загрузчик ready и ядро 2.4.9.
+Закройте After Effects и распакуйте весь ZIP. Запустите `install/Install-Windows.cmd` или `install/Install-macOS.command`. После установки запустите AE и откройте **Window → Extensions (Legacy) → FrameFlow 2.4**. В отчёте ожидаются версия 2.4.10, загрузчик ready и ядро 2.4.10.
 
 Установщик сохраняет предыдущую копию и включает неподписанные CEP 12 панели для текущей учётной записи. Это исходный пакет, не подписанный ZXP. Пользователю не нужны Node, Python, сервер или доступ панели к сети. Если пункт всё ещё отсутствует после перезапуска, сохраните вывод установщика и номер сборки из **Help → About After Effects**.
 

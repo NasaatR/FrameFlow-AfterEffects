@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.4.10
+
+- Accept bounded subframe rounding after AE writes a moved time, including native layer markers. Keep preview revalidation, untouched times and key attributes strict.
+- Use the same readback precision during rollback. Flag potentially partial changes when recovery cannot be confirmed.
+
 ## 2.4.9
 
 - Add In/Out + Keys as a previewed offset mode. On crossing layers, move the relevant layer edge and keys on the chosen side. Preflight rejects trims that would hide previously visible keys.
