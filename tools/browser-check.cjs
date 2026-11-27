@@ -84,15 +84,15 @@ function logScreenshot(name){const data=fs.readFileSync(path.join(output,name)).
       await menu('mode','offset');
     });
     await check('key-order conflicts offer a checked skip at 320 px without editing the scene',async()=>{
-      const [first,second]=host.comp.items, groups=host.groups(), time=host.comp.time, out=first.outPoint, start=second.inPoint;
+      const [first,second]=host.comp.items, groups=host.groups(), time=host.comp.time, out=first.outPoint, starts=[first.inPoint,second.inPoint];
       const keyTimes=host.comp.items.map(layer=>layer.keys.map(key=>key.time));
       try{
-        host.comp.time=53/24;first.outPoint=6;second.inPoint=0;
+        host.comp.time=53/24;first.outPoint=6;first.inPoint=0;second.inPoint=0;
         first.keys.forEach((key,i)=>{key.time=[50,54,80][i]/24;});
         second.keys.forEach((key,i)=>{key.time=[1,20,30][i]/24;});
         await page.locator('#frames').fill('5');
         await page.locator('#before-plus').click();
-        await page.waitForSelector('#preview-without-conflicts');
+        await page.waitForSelector('#preview-without-conflicts',{timeout:5000});
         assert.equal(await page.locator('#apply-preview').isEnabled(),false);
         await page.locator('#preview-without-conflicts').click();
         await page.waitForFunction(()=>!document.getElementById('apply-preview').disabled);
@@ -100,7 +100,7 @@ function logScreenshot(name){const data=fs.readFileSync(path.join(output,name)).
         assert.equal(await fits(),true);
         await page.locator('#close-dialog').click();
       }finally{
-        host.comp.time=time;first.outPoint=out;second.inPoint=start;
+        host.comp.time=time;first.inPoint=starts[0];first.outPoint=out;second.inPoint=starts[1];
         host.comp.items.forEach((layer,i)=>layer.keys.forEach((key,j)=>{key.time=keyTimes[i][j];}));
       }
     });

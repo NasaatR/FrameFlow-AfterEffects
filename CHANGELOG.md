@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.4.13
+
+- Isolate the browser test for the blocked key-conflict dialog from earlier arrangement edits.
+
 ## 2.4.12
 
 - Show the property and before/after times of both keys when an offset would collide or change key order.
