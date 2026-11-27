@@ -124,7 +124,7 @@ test('insert blocks duration markers crossing the insertion point before all wri
 test('remove blocks point markers in cut and duration markers overlapping either edge',()=>{for(const entries of [[[2.25]],[[1,1.25]],[[2.4,1]]]){const f=animationInterval(),m=markerProperty(f,entries);f.comp.markerProperty=m.p;const writes=f.writes(),r=interval(f,{action:'remove',compMarkers:true,crossing:'retime'});assert.equal(r.data.preview.blocked,true);assert.equal(f.writes(),writes);assert.equal(f.groups(),0);}});
 test('new composition markers after interval preview invalidate the plan without a write',()=>{const f=animationInterval(),m=markerProperty(f,[]);f.comp.markerProperty=m.p;const writes=f.writes(),r=interval(f,{compMarkers:true});assert.equal(r.data.preview.blocked,false);m.keys.push({time:3,selected:false,value:{comment:'new',duration:0,getParameters(){return {};}}});const a=f.call({op:'applyPreview',token:r.data.state.token,previewId:r.data.preview.id});assert.equal(a.ok,true);assert.ok(a.data.failure);assert.equal(f.writes(),writes);});
 test('interval later-layer movement retains native audio, parent and matte relationships',()=>{const f=animationInterval(),l=f.comp.items[1],parent=f.comp.items[0];l.hasAudio=true;l.parent=parent;l.hasTrackMatte=true;l.trackMatteLayer=parent;const original=l.keys.map(k=>k.time),r=interval(f);const a=f.call({op:'applyPreview',token:r.data.state.token,previewId:r.data.preview.id});assert.equal(a.ok,true);assert.equal(a.data.failure,undefined);assert.equal(l.inPoint,7.5);assert.equal(l.parent,parent);assert.equal(l.trackMatteLayer,parent);assert.deepEqual(l.keys.map(k=>k.time),original.map(t=>t+.5));});
-test('English diagnostics preserve artist-authored names and reject unknown language',()=>{const f=fixture();f.comp.name='Маркеры композиции';f.comp.items[0].name='слой';const r=f.raw(JSON.stringify({id:'english:1',version:'2.4.8',language:'en',data:{op:'read'}}));assert.equal(r.ok,true);assert.equal(r.data.state.name,'Маркеры композиции');assert.equal(r.data.state.layers[0].name,'слой');const bad=f.raw(JSON.stringify({id:'english:2',version:'2.4.8',language:'fr',data:{op:'read'}}));assert.equal(bad.ok,false);assert.equal(f.writes(),0);});
+test('English diagnostics preserve artist-authored names and reject unknown language',()=>{const f=fixture();f.comp.name='Маркеры композиции';f.comp.items[0].name='слой';const r=f.raw(JSON.stringify({id:'english:1',version:'2.4.9',language:'en',data:{op:'read'}}));assert.equal(r.ok,true);assert.equal(r.data.state.name,'Маркеры композиции');assert.equal(r.data.state.layers[0].name,'слой');const bad=f.raw(JSON.stringify({id:'english:2',version:'2.4.9',language:'fr',data:{op:'read'}}));assert.equal(bad.ok,false);assert.equal(f.writes(),0);});
 
 
 for(const region of ['before','after'])for(const preview of [false,true]){
@@ -190,4 +190,43 @@ test('properties without Bezier support move with Hold interpolation and retain 
   l.keys[2].label=7;p.keyLabel=i=>l.keys[i-1].label||0;p.setLabelAtKey=(i,label)=>{l.keys[i-1].label=label;};
   const r=timing(f,{scope:'selected',mode:'offset',frames:5,direction:-1});
   assert.equal(r.data.result.ok,true);assert.deepEqual(l.keys.map(k=>k.time),[1,2,3-5/24]);assert.equal(l.keys[2].label,7);
+});
+
+for (const region of ['before','after']) test('In/Out + Keys previews and moves the '+region+' edge and only that side’s keys',()=>{
+  const f=fixture(),layer=f.comp.layer(1);
+  f.comp.time=2.5;
+  const direction=region==='before'?1:-1;
+  const request={ids:[layer.id],mode:'edges',frames:6,region,direction};
+  assert.match(timing(f,request).error.message,/requires a preview/);
+  const r=timing(f,{...request,preview:true});
+  assert.equal(r.data.preview.blocked,false);
+  const change=r.data.preview.targets[0];
+  assert.equal(change.kind,'edge');
+  assert.deepEqual(change.before,{start:0,inPoint:0,outPoint:6});
+  assert.deepEqual(change.after,{start:0,inPoint:region==='before'?0.25:0,outPoint:region==='after'?5.75:6});
+  assert.equal(f.groups(),0);
+  assert.equal(applyPreview(f,r.data.preview).data.result.ok,true);
+  assert.deepEqual(layer.keys.map(k=>k.time),region==='before'?[1.25,2.25,3]:[1,2,2.75]);
+});
+
+test('In/Out + Keys rejects a smaller edge that would hide a key fixed by a label filter',()=>{
+  const f=fixture(),layer=f.comp.layer(1),prop=layer.property(1);
+  layer.keys[2].time=5.9;
+  prop.keyLabel=i=>i===3?5:0;
+  prop.setLabelAtKey=()=>{};
+  const reply=timing(f,{ids:[layer.id],mode:'edges',frames:12,direction:-1,region:'after',
+    labelFilter:'protect',labelIds:[5],preview:true});
+  assert.equal(reply.data.preview.blocked,true);
+  assert.match(reply.data.preview.skips.join(' '),/hide a visible key/);
+  assert.equal(f.groups(),0);
+});
+
+test('a property with no keys in scope needs only an endpoint read',()=>{
+  const f=fixture(),layer=f.comp.layer(1),prop=layer.property(1);
+  let timeReads=0;
+  const keyTime=prop.keyTime;
+  prop.keyTime=(i)=>{timeReads++;return keyTime(i);};
+  const r=timing(f,{ids:[layer.id],mode:'keys',direction:1,region:'after',preview:true});
+  assert.equal(r.data.preview.counts.changes,0);
+  assert.equal(timeReads,1);
 });

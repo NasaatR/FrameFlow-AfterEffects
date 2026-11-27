@@ -1,10 +1,10 @@
-# FrameFlow AE 2.4.8
+# FrameFlow AE 2.4.9
 
 A compact CEP 12 panel for timing commands around the After Effects playhead.
 
 **[Инструкция на русском](README_RU.md)** · [Changelog](CHANGELOG.md)
 
-The 2.4.8 installable archive is distributed separately. Quit After Effects, extract the complete ZIP and run `install/Install-Windows.cmd` or `install/Install-macOS.command`. Launch AE and open **Window → Extensions (Legacy) → FrameFlow 2.4**. Target: AE 25.x–27.x / CEP 12. The installer backs up the previous extension and enables unsigned CEP 12 panels for the current account. This is a source distribution, not a signed ZXP or GitHub Release. Installed users need no Node, Python, server or network access from the panel.
+The 2.4.9 installable archive is distributed separately. Quit After Effects, extract the complete ZIP and run `install/Install-Windows.cmd` or `install/Install-macOS.command`. Launch AE and open **Window → Extensions (Legacy) → FrameFlow 2.4**. Target: AE 25.x–27.x / CEP 12. The installer backs up the previous extension and enables unsigned CEP 12 panels for the current account. This is a source distribution, not a signed ZXP or GitHub Release. Installed users need no Node, Python, server or network access from the panel.
 
 ## Workflow
 
@@ -16,9 +16,12 @@ Choose frames with presets, stepper, Shift, wheel, slider or half/one-second sho
 
 The default 360 × 290 panel has compact scope/mode dropdowns and arrow + frame-count buttons. Auto is the default scope. Repeated labels, cursor readout and the preview-first toggle have been removed. Settings and help scroll within the panel. The duplicate AE timeline and layer list remain removed.
 
+**In/Out + Keys** opens a preview before changing any edge. On a layer crossing the cursor, Before moves In and earlier keys, and After moves Out and later keys. Other in-scope layers use the ordinary offset rules. The plan blocks a trim that would hide a visible key. Use **Time → Save current step to Quick Steps** to save the current value.
+
 ### Offset options and timing tools
 
 - **Settings → Offset options** controls nesting depth, key labels and skip rules. At depth 0, offsets use the current composition. Depth 1 edits direct sources of precomp instances crossing the cursor. Depth −1 follows all levels. **Inspect hierarchy** lists precomp instances and lets you pick the depth in scope. The preview names each target composition. Shared sources are edited once when every instance has the same mapping within scope. External uses, incompatible timing and affected protected regions block the plan.
+- Protected regions are checked on source compositions and layer instances. **Settings → Offset options → Skip during offset** can keep a layer when trimming it would clip a protected region. Nested source edits still check protected time and shared instances before writing.
 - **Protect labels** pins keys with the selected label IDs. **Only these labels** moves matching keys. A whole-layer move is skipped if it would carry a protected key. Layers + Keys can move the eligible keys without shifting the layer. AE controls label colors. Read the actual label IDs from selected keys or choose the slots directly.
 - **Time → Marker reference** uses a fixed guide layer. Each guide marker adds one step to targets on the chosen side. A target two markers away moves by two steps. The guide layer stays fixed. Clear the session reference to resume cursor-based offsets. Marker references also work with nested offsets. FrameFlow maps the guide boundaries into each nested source while preserving the guide layer and the crossing instance bounds.
 - **Time** also offers a signed session counter, selected key or layer measurements, and a range from the cursor you can use as a step or apply to the AE work area. The step field accepts arithmetic such as `2*12+5`. Use [KBar](docs/KBAR.md) or Shift-click a direction for a one-time step.
@@ -64,7 +67,7 @@ The 11 existing actions use one validated catalogue, shared button/menu componen
 
 Maintainer tools need Node >=20 with Acorn 8.17.0 or bundled Acorn through `--expose-internals`, Python 3 and Bash. Read-only CI runs on main pushes and PRs, checks Chromium layout/interactions with a simulated AE transport, runs packaging and uploads a separate checked build plus browser screenshots. Browser tooling uses isolated Playwright 1.62.1 and is not part of the installed panel. Issued ZIPs remain unchanged under `downloads/`.
 
-The user reports 2.1.1 is working in AE 25.6.4x3. The 2.4.2 manifest excluded After Effects 2027 (27.0). The updated range is checked during packaging. The original finite-media failure is reproduced in the regression suite. **2.4.8 host behavior, native Undo/Redo, clipboard and docking require an actual AE smoke test.** DOM tests simulate wiring. The package records which browser checks were run and ties any Chromium results to the exercised source files. See [verification](VERIFICATION.json) and [smoke test](docs/AE_SMOKE_TEST_RU.md).
+The user reports 2.1.1 is working in AE 25.6.4x3. The 2.4.2 manifest excluded After Effects 2027 (27.0). The updated range is checked during packaging. The original finite-media failure is reproduced in the regression suite. **2.4.9 host behavior, native Undo/Redo, clipboard and docking require an actual AE smoke test.** DOM tests simulate wiring. The package records which browser checks were run and ties any Chromium results to the exercised source files. See [verification](VERIFICATION.json) and [smoke test](docs/AE_SMOKE_TEST_RU.md).
 
 
 ## Roadmap and updates

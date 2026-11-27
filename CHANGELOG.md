@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.4.9
+
+- Add In/Out + Keys as a previewed offset mode. On crossing layers, move the relevant layer edge and keys on the chosen side. Preflight rejects trims that would hide previously visible keys.
+- Save the current frame step directly to Quick Steps from the Time menu or Settings.
+- Read protected regions on both the source and its instance. Optionally keep affected layers intact and continue with eligible layers.
+- Check only the nearest keyframe endpoint needed to rule out out-of-scope properties.
+
 ## 2.4.8
 
 - Combine marker-reference offsets with nested source retiming. Map marker boundaries and signed steps through the instance Stretch, and verify guide times and shared source usage before applying.

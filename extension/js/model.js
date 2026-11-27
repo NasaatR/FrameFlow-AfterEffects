@@ -1,9 +1,9 @@
 (function (root) {
   'use strict';
-  const VERSION = '2.4.8';
-  const defaults = {version:4, language:'en', theme:'dark', font:'system', fontSize:12, rowHeight:32, spacing:3, labelWidth:226, radius:6, accent:'#a7c7ff', motion:false, snap:true, autoRefresh:true, poll:1800, frames:12, mode:'offset', scope:'auto', compMarkers:false, mediaPolicy:'skip', depth:0, labelFilter:'off', labelIds:[], skipLocked:false, skipDisabled:false, skipUnsupported:false, rememberContext:false, units:'timecode', showKinds:true, contrast:'normal', quickSteps:[1,2,5,10,12,24,48]};
+  const VERSION = '2.4.9';
+  const defaults = {version:4, language:'en', theme:'dark', font:'system', fontSize:12, rowHeight:32, spacing:3, labelWidth:226, radius:6, accent:'#a7c7ff', motion:false, snap:true, autoRefresh:true, poll:1800, frames:12, mode:'offset', scope:'auto', compMarkers:false, mediaPolicy:'skip', depth:0, labelFilter:'off', labelIds:[], skipLocked:false, skipDisabled:false, skipUnsupported:false, skipProtected:false, rememberContext:false, units:'timecode', showKinds:true, contrast:'normal', quickSteps:[1,2,5,10,12,24,48]};
   const ranges = {depth:[-1,1000],fontSize:[11,16], rowHeight:[30,58], spacing:[0,12], labelWidth:[150,340], radius:[0,12], poll:[1000,5000], frames:[1,1000000]};
-  const choices = {labelFilter:['off','protect','only'],language:['en','ru'],theme:['dark','light','host'],font:['system','sans','mono'],mode:['layers','keys','selectedKeys','offset'],scope:['auto','selected','all'],mediaPolicy:['skip','stop'],units:['timecode','frames'],contrast:['normal','high']};
+  const choices = {labelFilter:['off','protect','only'],language:['en','ru'],theme:['dark','light','host'],font:['system','sans','mono'],mode:['layers','keys','selectedKeys','offset','edges'],scope:['auto','selected','all'],mediaPolicy:['skip','stop'],units:['timecode','frames'],contrast:['normal','high']};
   function luminance(hex) { const channels=[1,3,5].map(n=>parseInt(hex.slice(n,n+2),16)/255).map(v=>v<=.04045?v/12.92:Math.pow((v+.055)/1.055,2.4)); return channels[0]*.2126+channels[1]*.7152+channels[2]*.0722; }
   function contrast(a,b) { const x=luminance(a),y=luminance(b);return (Math.max(x,y)+.05)/(Math.min(x,y)+.05); }
   function accentFor(hex,light) {

@@ -116,7 +116,7 @@ test('Report opens and copies synchronously even if the browser clipboard would 
 test('Report falls back to the browser clipboard, and reports a blocked copy honestly',async()=>{for(const fail of [false,true]){let copied='';const h=harness(null,{syncCopy:false,clipboard:{writeText:async value=>{if(fail)throw Error('Denied');copied=value;}}});try{await h.settle();h.$('open-report').click();await h.settle();if(fail){assert.match(h.$('report-copy-state').textContent,/заблокировано/);assert.equal(h.document.activeElement,h.$('report-text'));}else{assert.equal(copied,h.$('report-text').value);assert.match(h.$('report-copy-state').textContent,/Скопировано/);}}finally{h.dispose();}}});
 test('settings save zero, theme and quick steps; appearance reset preserves timing choices',async()=>{const h=harness();try{await h.settle();h.document.querySelector('[data-step="24"]').click();scope(h,'all');mode(h,'keys');h.$('open-settings').focus();h.$('open-settings').click();h.$('pref-spacing').value='0';h.$('pref-spacing').dispatch('input');h.$('dialog-body').querySelectorAll('[data-pref]').find(b=>b.dataset.pref==='theme'&&b.dataset.value==='light').click();assert.equal(h.document.body.classList.contains('light'),true);h.$('quick-step-values').value='3, 7, 15';h.$('quick-step-values').dispatch('input');await new Promise(r=>setTimeout(r,250));const saved=JSON.parse([...h.storage.values()][0]);assert.equal(saved.version,4);assert.equal(saved.spacing,0);assert.deepEqual(saved.quickSteps,[3,7,15]);h.$('reset-appearance').click();h.$('close-dialog').click();assert.equal(h.document.activeElement,h.$('open-settings'));assert.equal(Number(h.$('frames').value),24);assert.equal(h.$('scope').textContent,'Все слои');assert.match(h.$('mode').textContent,/Все ключи/);assert.equal(h.document.querySelectorAll('[data-step]').length,3);}finally{h.dispose();}});
 test('menu keyboard, help and modal focus stay usable',async()=>{const h=harness();try{await h.settle();h.$('mode').focus();h.$('mode').click();assert.equal(h.$('menu').hidden,false);const first=h.document.activeElement;h.key('ArrowDown');assert.notEqual(h.document.activeElement,first);h.key('Escape');assert.equal(h.$('menu').hidden,true);assert.equal(h.document.activeElement,h.$('mode'));h.$('open-help').focus();h.$('open-help').click();assert.match(h.$('dialog-body').textContent,/Авто/);h.key('Escape');assert.equal(h.$('overlay').hidden,true);assert.equal(h.document.activeElement,h.$('open-help'));}finally{h.dispose();}});
-test('cold startup works with scoped evalFile and a detached global namespace',async()=>{const f=require('./host-fixture.cjs').fixture({unloaded:true,detachedGlobal:true}),h=harness(f);try{await h.settle();assert.equal(h.$('connection').textContent,'AE');assert.equal(f.ctx.FrameFlowCEP,undefined);assert.equal(f.ctx.$.global.FrameFlowCEP.version,'2.4.8');h.$('open-report').click();assert.match(h.copies[0],/Загрузчик: ready \/ ядро: 2\.4\.8/);assert.match(h.copies[0],/build 99/);assert.equal(f.writes(),0);}finally{h.dispose();}});
+test('cold startup works with scoped evalFile and a detached global namespace',async()=>{const f=require('./host-fixture.cjs').fixture({unloaded:true,detachedGlobal:true}),h=harness(f);try{await h.settle();assert.equal(h.$('connection').textContent,'AE');assert.equal(f.ctx.FrameFlowCEP,undefined);assert.equal(f.ctx.$.global.FrameFlowCEP.version,'2.4.9');h.$('open-report').click();assert.match(h.copies[0],/Загрузчик: ready \/ ядро: 2\.4\.9/);assert.match(h.copies[0],/build 99/);assert.equal(f.writes(),0);}finally{h.dispose();}});
 test('connection failure stops background retries; explicit Refresh restores the compact controls',async()=>{const f=hostScene();let broken=true,calls=0;const h=harness(f,{transport(script,cb){calls++;if(broken)cb('EvalScript error.');else cb(vm.runInContext(script,f.ctx));}});try{await h.settle();assert.equal(calls,1);assert.equal(h.$('after-plus').disabled,true);h.focus();await new Promise(r=>setTimeout(r,2000));assert.equal(calls,1);h.$('open-report').click();assert.match(h.copies[0],/BOOT_EMPTY/);h.$('close-dialog').click();broken=false;h.$('refresh').click();await h.settle();assert.equal(h.$('connection').textContent,'AE');assert.equal(h.$('after-plus').disabled,false);}finally{h.dispose();}});
 test('invalid frame draft survives losing focus and a metadata refresh',async()=>{const f=hostScene(),h=harness(f);try{await h.settle();h.$('frames').focus();h.$('frames').value='';h.$('frames').dispatch('input');h.$('refresh').focus();h.$('refresh').click();await h.settle();assert.equal(h.$('frames').value,'');assert.equal(h.$('after-plus').disabled,true);h.document.querySelector('[data-step="5"]').click();assert.equal(Number(h.$('frames').value),5);assert.equal(h.$('after-plus').disabled,false);}finally{h.dispose();}});
 
@@ -258,5 +258,39 @@ test('the reference picker lists only layers with markers and can clear an unava
     h.$('clear-marker-reference').click();await h.settle();
     assert.equal(f.state().markerReference,null);
     assert.equal(f.writes(),writes);
+  }finally{h.dispose();}
+});
+
+test('In/Out + Keys uses the same arrows and opens a plan before editing the edge',async()=>{
+  const {fixture}=require('./host-fixture.cjs');
+  const f=fixture(),layer=f.comp.layer(1);
+  f.comp.layer(2).selected=false;f.comp.time=2.5;
+  const h=harness(f,{fresh:true});
+  try{
+    await h.settle();
+    mode(h,'edges');
+    h.$('after-minus').click();await h.settle();
+    assert.equal(h.$('apply-preview').disabled,false);
+    assert.equal(f.groups(),0);
+    h.$('apply-preview').click();await h.settle();
+    assert.equal(f.groups(),1);
+    assert.equal(layer.outPoint,5.5);
+    assert.deepEqual(layer.keys.map(k=>k.time),[1,2,2.5]);
+  }finally{h.dispose();}
+});
+
+test('quick steps can save the current value without changing other presets or editing the scene',async()=>{
+  const f=hostScene(),h=harness(f,{fresh:true});
+  try{
+    await h.settle();
+    const field=h.$('frames');
+    field.value='23';field.dispatch('input');
+    menu(h,'time-menu','favorite-step');
+    assert.ok(h.document.querySelector('[data-step="23"]'));
+    assert.ok(h.document.querySelector('[data-step="24"]'));
+    h.$('open-settings').click();
+    assert.equal(h.$('save-quick-step').disabled,true);
+    assert.equal(h.$('quick-step-values').value,'1, 2, 5, 10, 12, 24, 48, 23');
+    assert.equal(f.groups(),0);
   }finally{h.dispose();}
 });

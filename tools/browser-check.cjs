@@ -69,6 +69,20 @@ function logScreenshot(name){const data=fs.readFileSync(path.join(output,name)).
         layer.source=source;for(const [property,previous] of labels){if(previous)property.keyLabel=previous;else delete property.keyLabel;}
       }
     });
+    await check('favorites and In/Out + Keys stay reachable at 320 px',async()=>{
+      await page.setViewportSize({width:320,height:280});
+      const groups=host.groups();
+      await page.locator('#frames').fill('31');
+      await menu('time-menu','favorite-step');
+      assert.equal(await page.locator('#presets [data-step="31"]').count(),1);
+      await menu('mode','edges');
+      await page.locator('#after-plus').click();
+      await page.waitForSelector('#apply-preview');
+      assert.equal(host.groups(),groups);
+      assert.equal(await fits(),true);
+      await page.locator('#close-dialog').click();
+      await menu('mode','offset');
+    });
     const fixtureRoot=path.join(output,'extension-with-extra-commands');fs.cpSync(path.join(root,'extension'),fixtureRoot,{recursive:true});
     const extraGroups=[{id:'tools',element:'tools-menu',title:['Tools','Инструменты']}],base={op:'arrange',form:'none',title:['Align tail','Конец к курсору'],args:{action:'alignOut',order:'top',anchor:'cursor',frames:1},context:['scope'],parameters:[],preview:'required'},extraCommands=[{...base,id:'alignTailShortcut',surface:'toolbar'},{...base,id:'tailInTools',surface:'menu',group:'tools'}];
     fs.appendFileSync(path.join(fixtureRoot,'js/commands.js'),'\nwindow.FFCommands=FFCommands.create(FFCommands.groups().concat('+JSON.stringify(extraGroups)+'),FFCommands.all().concat('+JSON.stringify(extraCommands)+'));\n');

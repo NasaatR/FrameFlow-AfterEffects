@@ -128,6 +128,7 @@ var FFNestedOffset = (function () {
             for (j = 0; j < part.skips.length; j++) root.skips.push(prefix+part.skips[j]);
             root.mediaLimits = root.mediaLimits.concat(part.mediaLimits);
             root.policySkipped = (root.policySkipped || 0)+(part.policySkipped || 0);
+            root.protectedSkipped = (root.protectedSkipped || 0)+(part.protectedSkipped || 0);
             root.offsetSpans = (root.offsetSpans || []).concat(part.offsetSpans || []);
             root.layerCount += part.layerCount;
         }

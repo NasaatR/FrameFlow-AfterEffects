@@ -1,5 +1,9 @@
 # FrameFlow status
 
+## 2.4.9
+
+Follow-up on Time Offset 1.4.4–1.8.1. Adds explicit edge-and-key shifts, direct step favorites, and protection for copied instance markers. The user’s default offset rule still moves only later keys for After when the playhead sits between keys. Native AE 27 tests remain open.
+
 ## 2.4.8
 
 Closes the marker-reference and nested-source combination gap and adds a read-only hierarchy picker. The reference review used embedded UI strings from Time Offset 1.4 and the author's public version history. See [workflow comparison](TIME_OFFSET_COMPARISON.md). Native AE 27 tests are open.

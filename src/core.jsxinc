@@ -103,7 +103,7 @@ var FFCore = (function () {
         if (s.scope !== "auto" && s.scope !== "all" && s.scope !== "selected") throw new Error("Неизвестная область");
         return "v1|frames="+frames(s.frames)+"|scope="+s.scope+"|compMarkers="+(s.compMarkers ? "1" : "0");
     }
-    function validMode(mode) { return mode === "offset" || mode === "keys" || mode === "selectedKeys" || mode === "layers"; }
+    function validMode(mode) { return mode === "offset" || mode === "edges" || mode === "keys" || mode === "selectedKeys" || mode === "layers"; }
     function parseAdvancedState(raw) {
         var result = {settings:{mode:"offset",strict:false},storageProtected:false,note:""}, parts, pair, seen = {}, i;
         if (raw === null || typeof raw === "undefined" || raw === "") return result;
@@ -246,7 +246,7 @@ var FFCore = (function () {
         parseFavorites:favorites, defaults:defaults, parseSettings:parseSettings, encodeSettings:encodeSettings};
 }());
 
-/* FrameFlow AE 2.4.8. AE adapter; native values never pass through JSON. */
+/* FrameFlow AE 2.4.9. AE adapter; native values never pass through JSON. */
 var FFHost = (function () {
     var LIMITS = {properties:20000, keys:50000, reportLines:300, textCharacters:2000};
     var ROOTS = ["ADBE Transform Group", "ADBE Mask Parade", "ADBE Effect Parade", "ADBE MTrackers",
@@ -532,7 +532,7 @@ var FFHost = (function () {
         return typeof label === "number" && label >= 0 && label <= 16 && Math.floor(label) === label;
     }
     function offsetOptions(input, request) {
-        var ids = input.labelIds, seen = {}, i, key, flags = ["skipLocked","skipDisabled","skipUnsupported"];
+        var ids = input.labelIds, seen = {}, i, key, flags = ["skipLocked","skipDisabled","skipUnsupported","skipProtected"];
         if (typeof input.labelFilter !== "undefined") {
             if (input.labelFilter !== "off" && input.labelFilter !== "protect" && input.labelFilter !== "only") throw new Error("Unknown key label filter.");
             request.labelFilter = input.labelFilter;
@@ -599,11 +599,11 @@ var FFHost = (function () {
     }
     function validateOffsetChange(change,request) {
         var i, paths, layer = change.layer;
-        if (!layer || !policyActive(request)) return;
+        if (!layer) return;
         if (excludedLayer(layer,request)) throw new Error("Layer availability changed after preview.");
-        if (change.kind === "layer") {
+        if (change.kind === "layer" && policyActive(request)) {
             if (nativeExclusion(layer,scanLayer(layer),request)) throw new Error("Native layer targets changed after preview.");
-        } else if (request.skipDisabled) {
+        } else if (change.kind !== "layer" && request.skipDisabled) {
             paths = change.kind === "property" ? [change] : change.properties;
             for (i = 0; i < paths.length; i++) if (disabledProperty(resolve(layer,paths[i].path),layer)) throw new Error("Property disabled after preview.");
         }
@@ -620,7 +620,7 @@ var FFHost = (function () {
         return info;
     }
     function readContext() {
-        var comp = app.project ? app.project.activeItem : null;
+        var project = app.project, comp = project ? project.activeItem : null;
         if (!(comp instanceof CompItem)) throw new Error("Откройте композицию в AE.");
         return {comp:comp, cti:comp.time, duration:comp.duration, frameDuration:comp.frameDuration};
     }
@@ -686,23 +686,52 @@ var FFHost = (function () {
             if (now.layers[i] !== plan.gapScope[i] || a.locked !== b.locked || Math.abs(a.start-b.start) > eps || Math.abs(a.inPoint-b.inPoint) > eps || Math.abs(a.outPoint-b.outPoint) > eps) throw new Error("Слои около паузы изменились; повторите действие");
         }
     }
-    // Protect the portion of each source region currently visible through this instance.
-    function protectedTrim(layer, after, eps) {
-        var source = layer.source, markers, value, i, begin, end, left, right, scale;
-        if (layer.inPoint >= after.inPoint-eps && layer.outPoint <= after.outPoint+eps) return false;
-        if (!(source instanceof CompItem) || !source.markerProperty) return false;
-        markers = source.markerProperty;
+    // AE copies protected source markers to an instance. The copy and source may diverge.
+    function cutsProtected(markers, layer, after, eps, offset, scale) {
+        var i, value, begin, end, left, right;
+        if (!markers) return false;
         for (i = 1; i <= markers.numKeys; i++) {
             value = markers.keyValue(i);
             if (!value.protectedRegion) continue;
-            if (layer.timeRemapEnabled || !(layer.stretch > 0)) return true;
-            scale = layer.stretch / 100;
-            begin = layer.startTime + markers.keyTime(i)*scale;
+            if (!scale) return true;
+            begin = offset + markers.keyTime(i)*scale;
             end = begin + value.duration*scale;
             left = Math.max(begin,layer.inPoint); right = Math.min(end,layer.outPoint);
             if (right-left > eps && (left < after.inPoint-eps || right > after.outPoint+eps)) return true;
         }
         return false;
+    }
+    function protectedTrim(layer, after, eps) {
+        var source = layer.source, scale;
+        if (layer.inPoint >= after.inPoint-eps && layer.outPoint <= after.outPoint+eps) return false;
+        if (cutsProtected(layer.property("ADBE Marker"),layer,after,eps,0,1)) return true;
+        if (!(source instanceof CompItem)) return false;
+        scale = !layer.timeRemapEnabled && layer.stretch > 0 ? layer.stretch/100 : 0;
+        return cutsProtected(source.markerProperty,layer,after,eps,layer.startTime,scale);
+    }
+    function verifyEdgeKeyVisibility(layer, after, entries, props, eps) {
+        if (layer.inPoint >= after.inPoint-eps && layer.outPoint <= after.outPoint+eps) return;
+        var byPath = {}, i, j, prop, edit, oldTime, newTime;
+        props = props || scanLayer(layer);
+        for (i = 0; i < entries.length; i++) byPath["p"+pathKey(entries[i].path)] = entries[i];
+        for (i = 0; i < props.length; i++) {
+            prop = props[i];
+            if (!prop.numKeys || prop.isSeparationLeader && prop.dimensionsSeparated) continue;
+            edit = byPath["p"+pathKey(pathOf(prop,layer))];
+            for (j = 1; j <= prop.numKeys; j++) {
+                oldTime = prop.keyTime(j);
+                if (oldTime < layer.inPoint-eps || oldTime > layer.outPoint+eps) continue;
+                newTime = edit ? edit.times[j-1] : oldTime;
+                if (newTime < after.inPoint-eps || newTime > after.outPoint+eps)
+                    throw new Error("This edge would hide a visible key. Shorten the shift or use All Keys.");
+            }
+        }
+    }
+    function regionHasKeys(prop,region,cti) {
+        if (!prop.numKeys) return false;
+        if (region === "before") return prop.keyTime(1) < cti;
+        if (region === "after") return prop.keyTime(prop.numKeys) >= cti;
+        return true;
     }
     function mediaBoundaryLimit(layer, after, context) {
         var source, duration, stretch, start, end, eps = context.frameDuration * 0.000001, limit = null;
@@ -794,9 +823,14 @@ var FFHost = (function () {
         var i, j, layer, props, pending, p, path, failed, count = 0;
         function entry(prop,owner,propertyPath) {
             var k, t, s, kp, excluded, relevant = false;
-            for (k = 1; k <= prop.numKeys; k++) {
-                t = prop.keyTime(k);
-                if ((!selectedOnly || prop.keySelected(k)) && FFCore.inRegion(t,{region:request.region,cti:context.cti})) { relevant = true; break; }
+            relevant = regionHasKeys(prop,request.region,context.cti);
+            if (relevant && selectedOnly) {
+                relevant = false;
+                for (k = 1; k <= prop.numKeys; k++) {
+                    if (!prop.keySelected(k)) continue;
+                    t = prop.keyTime(k);
+                    if (FFCore.inRegion(t,{region:request.region,cti:context.cti})) { relevant = true; break; }
+                }
             }
             if (!relevant) return null;
             if (prop.isSeparationLeader && prop.dimensionsSeparated) return null;
@@ -954,9 +988,7 @@ var FFHost = (function () {
         if (interval && request.operation === "removeTime") context.cti = request.interval.end;
         function addCount(n) { count += n; if (count > LIMITS.keys) throw new Error("Более 50000 ключей: сузьте область."); }
         function relevant(prop) {
-            var q;
-            for (q = 1; q <= prop.numKeys; q++) if (FFCore.inRegion(prop.keyTime(q),{region:request.region,cti:context.cti})) return true;
-            return false;
+            return regionHasKeys(prop,request.region,context.cti);
         }
         function partial(prop) {
             var snap = snapshotProperty(prop), info;
@@ -1013,7 +1045,11 @@ var FFHost = (function () {
             if (lp.kind === "none") continue;
             if (lp.kind === "edge") {
                 if (protectedTrim(layer,lp,context.frameDuration * 0.000001)) {
-                    plan.errors.push(labelFor(layer,[])+": this trim would cut a protected source region.");
+                    if (request.skipProtected) {
+                        plan.protectedSkipped = (plan.protectedSkipped || 0)+1;
+                        policySkip(plan,labelFor(layer,[]),"Protected region: layer and keys kept in place.");
+                    }
+                    else plan.errors.push(labelFor(layer,[])+": this trim would cut a protected source region.");
                     continue;
                 }
                 var mediaLimit = mediaBoundaryLimit(layer,lp,context);
@@ -1053,6 +1089,10 @@ var FFHost = (function () {
                         if (!interval && !kp.moved) continue;
                     }
                     entries.push({path:path,snapshot:kp.snapshot,times:kp.times,moved:kp.moved}); moved += kp.moved;
+                }
+                if (lp.kind === "edge" && request.mode === "edges") {
+                    if (lp.outPoint-lp.inPoint < context.frameDuration*(1-0.000001)) throw new Error("Keep at least one frame of the layer.");
+                    verifyEdgeKeyVisibility(layer,lp,entries,props,context.frameDuration*0.000001);
                 }
             } catch (captureError) { failed = errorInfo(captureError).message; }
             if (failed) { plan.skips.push(labelFor(layer,[])+": весь слой пропущен — "+failed); continue; }
@@ -1222,7 +1262,7 @@ var FFHost = (function () {
         if (errors.length) throw new Error(errors.join("\n"));
     }
     function applyPlan(plan) {
-        var result = {ok:false,partial:false,selectionRestored:null,changed:0,changedLayers:0,movedKeys:0,attempted:0,restored:false,recoveryErrors:[],skipped:plan.skips.length,mediaSkipped:plan.mediaLimits ? plan.mediaLimits.length : 0};
+        var result = {ok:false,partial:false,selectionRestored:null,changed:0,changedLayers:0,movedKeys:0,attempted:0,restored:false,recoveryErrors:[],skipped:plan.skips.length,mediaSkipped:plan.mediaLimits ? plan.mediaLimits.length : 0,protectedSkipped:plan.protectedSkipped || 0};
         var phase = "preflight", currentChange = null, layerSelection = null, recovering = false;
         var opened = false, touched = [], tolerance = plan.context.frameDuration * 0.000001, i, j, c, p, entry;
         try {
@@ -1243,10 +1283,13 @@ var FFHost = (function () {
                 validateOffsetChange(c,plan.request);
                 if (c.layer && (c.layer.locked || (c.ownerComp || plan.comp).layer(c.layer.index) !== c.layer)) throw new Error("Слой недоступен или заблокирован");
                 if (c.kind === "edge" && protectedTrim(c.layer,c.after,tolerance)) throw new Error("Protected source region changed. Preview again.");
-                if (c.kind !== "property") { checkLayer(c,false,tolerance); verifyLayerProperties(c,false,tolerance); }
+                if (c.kind !== "property") {
+                    checkLayer(c,false,tolerance); verifyLayerProperties(c,false,tolerance);
+                    if (c.kind === "edge" && plan.request.mode === "edges") verifyEdgeKeyVisibility(c.layer,c.after,c.properties,null,tolerance);
+                }
                 else verifyProperty(target(c,plan.comp),c.snapshot,originalTimes(c.snapshot),tolerance);
             }
-            app.beginUndoGroup(plan.arrangement ? "FrameFlow AE 2.4.8 — "+plan.arrangement.action : plan.request.operation === "closeGap" ? "FrameFlow AE 2.4.8 — Убрать паузу" : "FrameFlow AE 2.4.8 — Time Offset"); opened = true;
+            app.beginUndoGroup(plan.arrangement ? "FrameFlow AE 2.4.9 — "+plan.arrangement.action : plan.request.operation === "closeGap" ? "FrameFlow AE 2.4.9 — Убрать паузу" : "FrameFlow AE 2.4.9 — Time Offset"); opened = true;
             for (i = 0; i < plan.changes.length; i++) {
                 phase = "apply"; c = plan.changes[i]; currentChange = c; touched.push(c); result.attempted++;
                 if (c.kind === "layer") {
@@ -1317,7 +1360,7 @@ var FFHost = (function () {
         return result;
     }
     function environment() {
-        var lines = ["FrameFlow AE 2.4.8", "Дата: " + new Date().toString()];
+        var lines = ["FrameFlow AE 2.4.9", "Дата: " + new Date().toString()];
         function read(label,fn) { try { lines.push(label+": "+fn()); } catch (ignored) { lines.push(label+": неизвестно"); } }
         read("AE",function(){return app.version;}); read("Build",function(){return app.buildNumber;});
         read("OS",function(){return $.os;}); read("ExtendScript",function(){return $.version;});
@@ -1333,7 +1376,7 @@ var FFHost = (function () {
         if (r.markerBinding) lines.push("Marker reference layer id="+r.markerLayerId+"; boundaries="+r.markerTimes.length+"; step per applicable marker="+(r.direction*r.frames)+" frames");
         if (r.depth) lines.push("Nested depth="+r.depth+"; source comps="+(plan.nestedSources ? plan.nestedSources.length : 0));
         if (r.labelFilter && r.labelFilter !== "off") lines.push("Key label filter="+r.labelFilter+"; IDs="+r.labelIds.join(","));
-        if (r.skipLocked || r.skipDisabled || r.skipUnsupported) lines.push("Skip locked="+!!r.skipLocked+"; disabled="+!!r.skipDisabled+"; unsupported="+!!r.skipUnsupported);
+        if (r.skipLocked || r.skipDisabled || r.skipUnsupported || r.skipProtected) lines.push("Skip locked="+!!r.skipLocked+"; disabled="+!!r.skipDisabled+"; unsupported="+!!r.skipUnsupported+"; protected trims="+!!r.skipProtected);
         if (plan.mediaLimits && plan.mediaLimits.length) lines.push("Без запаса исходника: "+plan.mediaLimits.length+". "+(r.mediaPolicy === "skip" ? "Эти слои и все их ключи оставлены без изменений; остальные цели проходят строгую проверку." : "Вся операция отменяется до записи."));
         if (r.operation === "closeGap") lines.push("Удаление паузы ["+r.gap.start+", "+r.gap.end+") s; курсор до операции="+r.originalCTI+" s");
         if (r.interval) lines.push("Interval ["+r.interval.start+", "+r.interval.end+") s; operation="+r.operation+"; crossing="+r.interval.crossing+"; kept="+plan.keptCrossing.length+"; originalCTI="+r.originalCTI+" s");
