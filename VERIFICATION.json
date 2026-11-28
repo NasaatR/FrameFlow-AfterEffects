@@ -1,7 +1,7 @@
 {
   "product": "FrameFlow AE",
   "version": "2.5.1",
-  "checkedAt": "2026-11-28T12:52:12.565790+00:00",
+  "checkedAt": "2026-11-28T12:55:02.427083+00:00",
   "sourceRef": "local working tree before publication",
   "target": "After Effects 25.x–27.x / CEP 12 / Windows and macOS",
   "checks": {
@@ -337,7 +337,7 @@
       ],
       "sourceHashes": {
         "extension/index.html": "0c7e411043fe81d4cf743186b0580121f66a91d91f87f924f0291df239683df6",
-        "extension/css/panel.css": "f33a036a9fba22f375abe4b8f08e334313bdcc628f97920acf30beefaa08e07a",
+        "extension/css/panel.css": "8bd96746a03afea012c9514b3f71b20534ceab283263ead1fa78a3b3d224a07a",
         "extension/js/bridge.js": "a431fa3afa311b6c9eb6ba5b9b78db5afe23d23645f44faa76704d88767fb11b",
         "extension/js/commands.js": "891e384611a1c1fe68d807622955db17183d3c9454be8e64c6f0a0c79441f903",
         "extension/js/demo.js": "00ec9d778e25a5b4deda080854a79567d45ee1ffd470c734261d4c6c809b9735",
@@ -374,7 +374,7 @@
     ".gitignore": "8853fe1710f63b79e45901adca767b266ccdad7fb088a20f11003a91a6612ee9",
     "AGENTS.md": "b447c39d9f0ff87ceebe2813dd07abd705630b43c8d930a779012007c1df9be6",
     "CHANGELOG.md": "74b68b82f52c899d47f8bcd6b3f0a4cb3a829bb426f50564a1c6597476b0cadf",
-    "PREVIEW.html": "bdd5ee3361c78408ac1b3d42daa22504269883b9dd908768487ffa250df51627",
+    "PREVIEW.html": "d1bb94d7d4d4850acd916987b87ba9574695e475a73aea09b2308b96d169f824",
     "README.md": "63794fb08bbfc88ad54f7acc5c13500b166cc8e33c4a32f9fa959b557363e632",
     "README_RU.md": "610282bf300e1a696f204f83cbabd2731349a2dc834a37dc123d4b9d9a9e9742",
     "ROADMAP_RU.md": "4c87b93150f536ac802a41081f32bbf83b8851ebbc4c3d60b73a507cbf8fcd8b",
@@ -384,9 +384,9 @@
     "docs/SOURCES.md": "4ada45c84e3ae959dce764ce420b1a18ccaa502215c963eb0e74b947315c14fc",
     "docs/STATUS.md": "93626a579d627f0cef1c5be63df830e6090f4e355e1d2ad944e8cc92a28986a5",
     "docs/TIME_OFFSET_COMPARISON.md": "5f0fa357874ff78fb1d1c5b180ff824a41e3c1026e67077998344bf052fe876b",
-    "docs/verification.log": "cf51aceb8dc67181379dd47bcf145c9ea3a460d840ca85e952c0243a8117e411",
+    "docs/verification.log": "58197ae11cb276663758c6b1e85dfde02b622618cdddcb51529defc76c1cb300",
     "extension/CSXS/manifest.xml": "0391deb7e7aaa25d7f40ef30f68f9dbc33f65c3621158acf606ad9422af48689",
-    "extension/css/panel.css": "f33a036a9fba22f375abe4b8f08e334313bdcc628f97920acf30beefaa08e07a",
+    "extension/css/panel.css": "8bd96746a03afea012c9514b3f71b20534ceab283263ead1fa78a3b3d224a07a",
     "extension/index.html": "0c7e411043fe81d4cf743186b0580121f66a91d91f87f924f0291df239683df6",
     "extension/js/bridge.js": "a431fa3afa311b6c9eb6ba5b9b78db5afe23d23645f44faa76704d88767fb11b",
     "extension/js/commands.js": "891e384611a1c1fe68d807622955db17183d3c9454be8e64c6f0a0c79441f903",
