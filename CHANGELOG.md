@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.5.1
+
+- Put scope and five shift modes on compact buttons. Time and Arrange open inline button groups.
+- Add a Preview switch for shifts and Close Gap. Keep required previews and checked Apply behavior.
+- Use neutral tones in Dark, Light and Follow AE, including when loading older colored accent preferences.
+- Rebuild Settings with Appearance, Workflow, Quick Steps and Data tabs, live appearance controls, numeric sizing, and scoped appearance copy/import.
+
 ## 2.5.0
 
 - Carry the legacy 2.4 series to 2.5. The build checks single-digit minor and patch fields and matching panel, host and manifest versions. CEP bundle and panel IDs stay the same.

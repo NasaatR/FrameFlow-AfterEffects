@@ -1,6 +1,6 @@
 {
   "name": "frameflow-ae",
-  "version": "2.5.0",
+  "version": "2.5.1",
   "private": true,
   "description": "Compact CEP timing panel for After Effects 25–27; maintainer tooling only",
   "scripts": {"build": "node tools/build.cjs", "test": "node tools/check.cjs"},

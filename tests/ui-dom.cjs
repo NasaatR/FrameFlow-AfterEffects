@@ -1,7 +1,7 @@
 /* Focused UI wiring tests on a minimal DOM simulation. NOT browser/layout evidence. */
 'use strict';
 const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),test=require('node:test'),assert=require('node:assert/strict');
-test('frame editing avoids appearance writes and dropdown replacement while coalescing preference saves',async()=>{
+test('frame editing avoids appearance writes and button replacement while coalescing preference saves',async()=>{
   const f=hostScene(),h=harness(f,{fresh:true});try{await h.settle();const a={...h.metrics},scopeChild=h.$('scope').children[0],modeChild=h.$('mode').children[0];
     for(let n=13;n<=32;n++){h.$('frame-slider').value=String(n);h.$('frame-slider').dispatch('input');}
     assert.equal(h.metrics.styleWrites,a.styleWrites);assert.equal(h.metrics.htmlWrites,a.htmlWrites);assert.equal(h.$('scope').children[0],scopeChild);assert.equal(h.$('mode').children[0],modeChild);assert.equal(h.$('after-plus').querySelector('.step-value').textContent,'32');assert.equal(f.groups(),0);
@@ -15,7 +15,7 @@ test('unchanged values do not save again and choosing the current preset repairs
 });
 for(const next of ['close','help'])test('a late read-only preview respects '+next+' instead of reopening/replacing a dialog',async()=>{
   const f=hostScene(),pending=[],h=harness(f,{fresh:true,transport(script,cb){const result=vm.runInContext(script,f.ctx);if(script.includes(encodeURIComponent('"preview":true')))pending.push(()=>cb(result));else setTimeout(()=>cb(result),0);}});
-  try{await h.settle();menu(h,'arrange-menu','stagger');h.$('arrange-preview').click();await h.until(()=>pending.length===1);assert.equal(pending.length,1);h.key('Escape');if(next==='help')h.$('open-help').click();pending[0]();await h.settle();assert.equal(f.groups(),0);assert.equal(h.$('apply-preview'),null);if(next==='close')assert.equal(h.$('overlay').hidden,true);else assert.equal(h.$('dialog-title').textContent,'How FrameFlow Works');}finally{h.dispose();}
+  try{await h.settle();tool(h,'arrange-menu','stagger');h.$('arrange-preview').click();await h.until(()=>pending.length===1);assert.equal(pending.length,1);h.key('Escape');if(next==='help')h.$('open-help').click();pending[0]();await h.settle();assert.equal(f.groups(),0);assert.equal(h.$('apply-preview'),null);if(next==='close')assert.equal(h.$('overlay').hidden,true);else assert.equal(h.$('dialog-title').textContent,'How FrameFlow Works');}finally{h.dispose();}
 });
 const shortcut={id:'alignTailShortcut',op:'arrange',surface:'toolbar',form:'none',title:['Align tail','Конец к курсору'],args:{action:'alignOut',order:'top',anchor:'cursor',frames:1},context:['scope'],parameters:[],preview:'required'};
 test('a catalogue-only toolbar button uses shared styling, preview and native application',async()=>{
@@ -23,16 +23,29 @@ test('a catalogue-only toolbar button uses shared styling, preview and native ap
   b.click();await h.settle();assert.equal(f.groups(),0);assert.equal(h.$('apply-preview').disabled,false);h.$('apply-preview').click();await h.settle();assert.equal(f.groups(),1);assert.deepEqual(f.comp.items.map(l=>l.outPoint),[4,4]);h.dispose();
 });
 test('new groups appear from metadata, localize and retain keyboard focus',async()=>{
-  const f=hostScene(),h=harness(f,{fresh:true,extraGroups:[{id:'tools',element:'tools-menu',title:['Tools','Инструменты']}],extraCommands:[{...shortcut,id:'tailInTools',surface:'menu',group:'tools'}]});await h.settle();assert.equal(h.$('tools-menu').textContent,'Tools');h.$('tools-menu').click();assert.equal(h.$('menu').querySelector('[data-choice="tailInTools"]').textContent,'Align tail');h.key('Escape');assert.equal(h.document.activeElement,h.$('tools-menu'));
-  h.$('open-settings').click();h.$('dialog-body').querySelectorAll('[data-pref]').find(b=>b.dataset.pref==='language'&&b.dataset.value==='ru').click();h.$('close-dialog').click();assert.equal(h.$('tools-menu').textContent,'Инструменты');h.$('tools-menu').click();assert.equal(h.$('menu').querySelector('[data-choice="tailInTools"]').textContent,'Конец к курсору');h.dispose();
+  const f=hostScene(),h=harness(f,{fresh:true,extraGroups:[{id:'tools',element:'tools-menu',title:['Tools','Инструменты']}],extraCommands:[{...shortcut,id:'tailInTools',surface:'menu',group:'tools'}]});await h.settle();assert.equal(h.$('tools-menu').textContent,'Tools');h.$('tools-menu').click();assert.equal(h.$('tools-menu-tailInTools').textContent,'Align tail');h.key('Escape');assert.equal(h.document.activeElement,h.$('tools-menu'));
+  h.$('open-settings').click();settingsTab(h,'data');h.$('dialog-body').querySelectorAll('[data-pref]').find(b=>b.dataset.pref==='language'&&b.dataset.value==='ru').click();h.$('close-dialog').click();assert.equal(h.$('tools-menu').textContent,'Инструменты');h.$('tools-menu').click();assert.equal(h.$('tools-menu-tailInTools').textContent,'Конец к курсору');h.dispose();
 });
-test('Plan keeps frame-independent actions available while invalid drafts disable only shifts',async()=>{
-  const h=harness(hostScene(),{fresh:true});await h.settle();h.$('frames').value='';h.$('frames').dispatch('input');assert.equal(h.$('preview-plan').disabled,false);h.$('preview-plan').click();assert.equal(h.$('menu').querySelector('[data-choice="after:1"]').disabled,true);assert.equal(h.$('menu').querySelector('[data-choice="gap"]').disabled,false);assert.equal(h.document.activeElement,h.$('menu').querySelector('[data-choice="gap"]'));h.dispose();
+test('Preview keeps frame-independent actions available while invalid drafts disable shifts',async()=>{
+  const h=harness(hostScene(),{fresh:true});
+  try{
+    await h.settle();
+    h.$('frames').value='';h.$('frames').dispatch('input');
+    assert.equal(h.$('preview-plan').disabled,false);
+    preview(h,'gap');await h.settle();
+    assert.equal(h.$('after-plus').disabled,true);
+    assert.equal(h.$('offset-plan').hidden,false);
+    assert.equal(h.$('overlay').hidden,true);
+    assert.equal(h.$('preview-plan').getAttribute('aria-pressed'),'true');
+    h.$('preview-plan').click();
+    assert.equal(h.$('offset-plan').hidden,true);
+    assert.equal(h.$('preview-plan').getAttribute('aria-pressed'),'false');
+  }finally{h.dispose();}
 });
 test('Arrange routes four operations through read-only plans and reports each layer delta',async()=>{
   const f=hostScene(),h=harness(f,{fresh:true});await h.settle();
   for(const action of ['alignIn','alignOut','stagger','sequence']){
-    h.$('arrange-menu').click();h.$('menu').querySelector('[data-choice="'+action+'"]').click();assert.ok(h.$('arrange-preview'));assert.equal(f.groups(),0);
+    tool(h,'arrange-menu',action);assert.ok(h.$('arrange-preview'));assert.equal(f.groups(),0);
     h.$('arrange-preview').click();await h.settle();assert.ok(h.$('apply-preview'));assert.equal(f.groups(),0);assert.match(h.$('dialog-body').textContent,/Whole layer/);
     assert.equal(h.$('dialog-body').scrollTop,0);assert.equal(h.$('apply-preview').parentElement.parentElement,h.$('dialog-footer'));h.$('dialog-body').scrollTop=300;
     if(action==='stagger'){assert.match(h.$('dialog-body').textContent,/\+96 frames/);assert.match(h.$('dialog-body').textContent,/−36 frames/);assert.match(h.$('dialog-body').textContent,/Top → Bottom/);}
@@ -41,14 +54,14 @@ test('Arrange routes four operations through read-only plans and reports each la
   h.dispose();
 });
 test('Sequence accepts zero, rejects invalid drafts, and applies explicit reverse order and anchor',async()=>{
-  const f=hostScene(),h=harness(f,{fresh:true});await h.settle();h.$('arrange-menu').click();h.$('menu').querySelector('[data-choice="sequence"]').click();
+  const f=hostScene(),h=harness(f,{fresh:true});await h.settle();tool(h,'arrange-menu','sequence');
   const field=h.$('arrange-frames');assert.equal(field.value,'0');field.value='-1';field.dispatch('input');assert.equal(h.$('arrange-preview').disabled,true);assert.equal(field.value,'-1');assert.match(h.$('arrange-error').textContent,/whole frame count/);
   field.value='0';field.dispatch('input');h.$('dialog-body').querySelector('[data-arrange-order="bottom"]').click();h.$('dialog-body').querySelector('[data-arrange-anchor="first"]').click();h.$('arrange-preview').click();await h.settle();assert.equal(f.groups(),0);h.$('apply-preview').click();await h.settle();
   assert.equal(f.groups(),1);assert.equal(f.comp.items[1].inPoint,6);assert.equal(f.comp.items[0].inPoint,8);assert.equal(f.comp.duration,12);h.dispose();
 });
-test('Arrange is disabled offline and Escape restores the menu owner focus',async()=>{
+test('Arrange is disabled offline and Escape restores the group button focus',async()=>{
   const offline=harness(null,{fresh:true});assert.equal(offline.$('arrange-menu').disabled,true);offline.dispose();
-  const h=harness(hostScene(),{fresh:true});await h.settle();h.$('arrange-menu').click();h.$('menu').querySelector('[data-choice="sequence"]').click();h.key('Escape');assert.equal(h.$('overlay').hidden,true);assert.equal(h.document.activeElement,h.$('arrange-menu'));h.dispose();
+  const h=harness(hostScene(),{fresh:true});await h.settle();tool(h,'arrange-menu','sequence');h.key('Escape');assert.equal(h.$('overlay').hidden,true);assert.equal(h.document.activeElement,h.$('arrange-menu'));h.dispose();
 });
 function harness(host,options={}){
   const listeners=new Map(),storage=new Map(),copies=[],metrics={styleWrites:0,htmlWrites:0,storageWrites:0};let document;if(!options.fresh)options.savedPreferences={...require('../extension/js/model.js').defaults,...options.savedPreferences,language:'ru'};if(options.savedPreferences)storage.set('frameflow.preferences.v1',JSON.stringify(options.savedPreferences));
@@ -98,10 +111,19 @@ function harness(host,options={}){
   return {$,document,ctx,storage,copies,metrics,settle,until,dispose(){for(const fn of listeners.get('beforeunload')||[])fn();},focus(){for(const fn of listeners.get('focus')||[])fn();},key(key,extra={}){for(const fn of listeners.get('keydown')||[])fn({key,target:document.body,preventDefault(){},...extra});}};
 }
 function hostScene(){const f=require('./host-fixture.cjs').fixture();f.comp.items[0].inPoint=0;f.comp.items[0].outPoint=2;f.comp.items[1].inPoint=6;f.comp.items[1].outPoint=8;return f;}
-function menu(h,owner,value){h.$(owner).click();h.$('menu').querySelector('[data-choice="'+value+'"]').click();}
-function scope(h,value){menu(h,'scope',value);}
-function mode(h,value){menu(h,'mode',value);}
-function preview(h,value='after:1'){menu(h,'preview-plan',value);}
+function tool(h,owner,value){
+  if(h.$(owner).getAttribute('aria-expanded')!=='true')h.$(owner).click();
+  h.$(owner+'-'+value).click();
+}
+function scope(h,value){h.$('scope').querySelector('[data-scope="'+value+'"]').click();}
+function mode(h,value){h.$('mode').querySelector('[data-mode="'+value+'"]').click();}
+function settingsTab(h,tab){h.$('settings-nav').querySelector('[data-settings-tab="'+tab+'"]').click();}
+function selectedOption(h,id,attr){return h.$(id).querySelectorAll('[data-'+attr+']').find(b=>b.getAttribute('aria-pressed')==='true').dataset[attr];}
+function preview(h,value='after:1'){
+  if(h.$('preview-plan').getAttribute('aria-pressed')!=='true')h.$('preview-plan').click();
+  const [region,direction]=value.split(':');
+  h.$(direction===undefined?region:region+(direction==='1'?'-plus':'-minus')).click();
+}
 function offsetDetails(h){
   const toggle=h.$('offset-plan-details');
   toggle.open=true;toggle.dispatch('toggle');
@@ -113,32 +135,86 @@ for(const region of ['before','after'])for(const direction of [-1,1])test('UI '+
 test('Auto commands work with no selection and gap uses the same automatic scope',async()=>{const f=hostScene();f.comp.items.forEach(l=>l.selected=false);const h=harness(f);try{await h.settle();assert.match(h.$('scope').textContent,/Авто/);assert.equal(h.$('after-plus').disabled,false);h.$('gap').click();await h.settle();assert.equal(f.comp.items[1].inPoint,2);assert.equal(f.groups(),1);}finally{h.dispose();}});
 test('commands refresh CTI before calculating the region without demanding manual refresh',async()=>{const f=hostScene(),h=harness(f);try{await h.settle();mode(h,'layers');scope(h,'all');f.comp.time=9;h.$('before-plus').click();await h.settle();assert.equal(f.comp.items[0].inPoint,.5);assert.equal(f.comp.items[1].inPoint,6.5);assert.equal(f.groups(),1);assert.doesNotMatch(h.$('status').textContent,/Обновите/);}finally{h.dispose();}});
 test('Auto resolves a changed AE selection at action time, never cached UI IDs',async()=>{const f=hostScene(),h=harness(f);try{await h.settle();mode(h,'layers');f.comp.items[0].selected=false;f.comp.items[1].selected=true;h.$('after-plus').click();await h.settle();assert.equal(f.comp.items[0].inPoint,0);assert.equal(f.comp.items[1].inPoint,6.5);assert.equal(f.groups(),1);}finally{h.dispose();}});
-test('Selected with empty selection is visibly unavailable without widening scope',async()=>{const f=hostScene();f.comp.items.forEach(l=>l.selected=false);const h=harness(f);try{await h.settle();scope(h,'selected');assert.equal(h.$('after-plus').disabled,true);assert.equal(h.$('gap').disabled,true);assert.match(h.$('scope').title,/Нет выделенных/);h.$('after-plus').click();await h.settle();assert.equal(f.groups(),0);scope(h,'auto');assert.equal(h.$('after-plus').disabled,false);}finally{h.dispose();}});
+test('Selected with empty selection is visibly unavailable without widening scope',async()=>{const f=hostScene();f.comp.items.forEach(l=>l.selected=false);const h=harness(f);try{await h.settle();scope(h,'selected');assert.equal(h.$('after-plus').disabled,true);assert.equal(h.$('gap').disabled,true);assert.match(h.$('scope').querySelector('[data-scope="selected"]').title,/Нет выделенных/);h.$('after-plus').click();await h.settle();assert.equal(f.groups(),0);scope(h,'auto');assert.equal(h.$('after-plus').disabled,false);}finally{h.dispose();}});
 test('invalid frame drafts survive; gap remains independent of step input',async()=>{const f=hostScene(),h=harness(f);try{await h.settle();h.$('frames').focus();h.$('frames').value='';h.$('frames').dispatch('input');assert.equal(h.$('frames').value,'');assert.equal(h.$('after-plus').disabled,true);assert.equal(h.$('gap').disabled,false);h.$('gap').click();await h.settle();assert.equal(f.comp.items[1].inPoint,2);}finally{h.dispose();}});
-test('Plan menu can choose any side and never creates an Undo group',async()=>{const f=hostScene(),h=harness(f);try{await h.settle();mode(h,'layers');scope(h,'all');h.$('before-plus').click();await h.settle();const groups=f.groups(),before=f.comp.items[0].inPoint;preview(h,'before:1');await h.settle();assert.equal(f.groups(),groups);assert.equal(f.comp.items[0].inPoint,before);assert.equal(h.$('overlay').hidden,true);assert.equal(h.$('offset-plan').hidden,false);assert.match(h.$('offset-plan').textContent,/До курсора/);assert.ok(h.$('apply-preview'));assert.equal(h.copies.length,0);}finally{h.dispose();}});
+test('Preview can choose any side and never creates an Undo group',async()=>{const f=hostScene(),h=harness(f);try{await h.settle();mode(h,'layers');scope(h,'all');h.$('before-plus').click();await h.settle();const groups=f.groups(),before=f.comp.items[0].inPoint;preview(h,'before:1');await h.settle();assert.equal(f.groups(),groups);assert.equal(f.comp.items[0].inPoint,before);assert.equal(h.$('overlay').hidden,true);assert.equal(h.$('offset-plan').hidden,false);assert.match(h.$('offset-plan').textContent,/До курсора/);assert.ok(h.$('apply-preview'));assert.equal(h.copies.length,0);}finally{h.dispose();}});
 test('removed timeline shortcuts cannot trigger whole-composition moves',async()=>{const f=hostScene(),h=harness(f);try{await h.settle();h.key('ArrowRight');h.key('ArrowLeft',{shiftKey:true});h.key('s');h.key('[');await h.settle();assert.equal(f.groups(),0);}finally{h.dispose();}});
 test('Report opens and copies synchronously even if the browser clipboard would reject',async()=>{let asyncCopies=0;const h=harness(null,{clipboard:{writeText:async()=>{asyncCopies++;throw Error('NotAllowedError');}}});try{await h.settle();h.$('open-report').click();assert.equal(h.copies.length,1);assert.equal(h.copies[0],h.$('report-text').value);assert.match(h.$('report-copy-state').textContent,/Скопировано/);assert.equal(asyncCopies,0);}finally{h.dispose();}});
 test('Report falls back to the browser clipboard, and reports a blocked copy honestly',async()=>{for(const fail of [false,true]){let copied='';const h=harness(null,{syncCopy:false,clipboard:{writeText:async value=>{if(fail)throw Error('Denied');copied=value;}}});try{await h.settle();h.$('open-report').click();await h.settle();if(fail){assert.match(h.$('report-copy-state').textContent,/заблокировано/);assert.equal(h.document.activeElement,h.$('report-text'));}else{assert.equal(copied,h.$('report-text').value);assert.match(h.$('report-copy-state').textContent,/Скопировано/);}}finally{h.dispose();}}});
-test('settings save zero, theme and quick steps; appearance reset preserves timing choices',async()=>{const h=harness();try{await h.settle();h.document.querySelector('[data-step="24"]').click();scope(h,'all');mode(h,'keys');h.$('open-settings').focus();h.$('open-settings').click();h.$('pref-spacing').value='0';h.$('pref-spacing').dispatch('input');h.$('dialog-body').querySelectorAll('[data-pref]').find(b=>b.dataset.pref==='theme'&&b.dataset.value==='light').click();assert.equal(h.document.body.classList.contains('light'),true);h.$('quick-step-values').value='3, 7, 15';h.$('quick-step-values').dispatch('input');await new Promise(r=>setTimeout(r,250));const saved=JSON.parse([...h.storage.values()][0]);assert.equal(saved.version,4);assert.equal(saved.spacing,0);assert.deepEqual(saved.quickSteps,[3,7,15]);h.$('reset-appearance').click();h.$('close-dialog').click();assert.equal(h.document.activeElement,h.$('open-settings'));assert.equal(Number(h.$('frames').value),24);assert.equal(h.$('scope').textContent,'Все слои');assert.match(h.$('mode').textContent,/Все ключи/);assert.equal(h.document.querySelectorAll('[data-step]').length,3);}finally{h.dispose();}});
-test('menu keyboard, help and modal focus stay usable',async()=>{const h=harness();try{await h.settle();h.$('mode').focus();h.$('mode').click();assert.equal(h.$('menu').hidden,false);const first=h.document.activeElement;h.key('ArrowDown');assert.notEqual(h.document.activeElement,first);h.key('Escape');assert.equal(h.$('menu').hidden,true);assert.equal(h.document.activeElement,h.$('mode'));h.$('open-help').focus();h.$('open-help').click();assert.match(h.$('dialog-body').textContent,/Авто/);h.key('Escape');assert.equal(h.$('overlay').hidden,true);assert.equal(h.document.activeElement,h.$('open-help'));}finally{h.dispose();}});
-test('cold startup works with scoped evalFile and a detached global namespace',async()=>{const f=require('./host-fixture.cjs').fixture({unloaded:true,detachedGlobal:true}),h=harness(f);try{await h.settle();assert.equal(h.$('connection').textContent,'AE');assert.equal(f.ctx.FrameFlowCEP,undefined);assert.equal(f.ctx.$.global.FrameFlowCEP.version,'2.5.0');h.$('open-report').click();assert.match(h.copies[0],/Загрузчик: ready \/ ядро: 2\.5\.0/);assert.match(h.copies[0],/build 99/);assert.equal(f.writes(),0);}finally{h.dispose();}});
+test('settings save zero, theme and quick steps; appearance reset preserves timing choices',async()=>{const h=harness();try{await h.settle();h.document.querySelector('[data-step="24"]').click();scope(h,'all');mode(h,'keys');h.$('open-settings').focus();h.$('open-settings').click();h.$('pref-spacing').value='0';h.$('pref-spacing').dispatch('input');h.$('dialog-body').querySelectorAll('[data-pref]').find(b=>b.dataset.pref==='theme'&&b.dataset.value==='light').click();assert.equal(h.document.body.classList.contains('light'),true);settingsTab(h,'steps');h.$('quick-step-values').value='3, 7, 15';h.$('quick-step-values').dispatch('input');await new Promise(r=>setTimeout(r,250));const saved=JSON.parse([...h.storage.values()][0]);assert.equal(saved.version,4);assert.equal(saved.spacing,0);assert.deepEqual(saved.quickSteps,[3,7,15]);settingsTab(h,'appearance');h.$('reset-appearance').click();h.$('close-dialog').click();assert.equal(h.document.activeElement,h.$('open-settings'));assert.equal(Number(h.$('frames').value),24);assert.equal(selectedOption(h,'scope','scope'),'all');assert.equal(selectedOption(h,'mode','mode'),'keys');assert.equal(h.document.querySelectorAll('[data-step]').length,3);}finally{h.dispose();}});
+test('settings restore their last tab and round-trip grayscale appearance without changing timing',async()=>{
+  const M=require('../extension/js/model.js'),h=harness(hostScene(),{fresh:true,savedPreferences:{...M.defaults,accent:'#a7c7ff',frames:5,mediaPolicy:'stop'}});
+  try{
+    await h.settle();
+    h.$('open-settings').click();
+    const number=h.$('value-spacing'),slider=h.$('pref-spacing');
+    number.value='-1';number.dispatch('input');
+    assert.equal(number.getAttribute('aria-invalid'),'true');
+    assert.equal(slider.value,'3');
+    number.value='0';number.dispatch('input');
+    assert.equal(number.getAttribute('aria-invalid'),'false');
+    assert.equal(slider.value,'0');
+    assert.equal(h.document.documentElement.style['--gap'],'0px');
+    assert.match(h.document.documentElement.style['--accent'],/^#([a-f0-9]{2})\1\1$/i);
+    settingsTab(h,'data');
+    h.$('copy-appearance').click();
+    const data=JSON.parse(h.copies[0]);
+    assert.equal(data.type,'FrameFlow appearance');
+    assert.equal(data.version,1);
+    assert.equal(data.values.spacing,0);
+    assert.equal(data.values.frames,undefined);
+    h.$('close-dialog').click();h.$('open-settings').click();
+    assert.equal(h.$('settings-data').hidden,false);
+    assert.equal(h.$('settings-appearance').hidden,true);
+    const input=h.$('import-file');
+    const imported=JSON.stringify({...data,values:{...data.values,radius:0}});
+    input.files=[{size:imported.length,text:async()=>imported}];
+    input.dispatch('change');
+    await new Promise(resolve=>setTimeout(resolve,300));
+    const saved=JSON.parse([...h.storage.values()][0]);
+    assert.equal(saved.spacing,0);
+    assert.equal(saved.radius,0);
+    assert.equal(saved.frames,5);
+    assert.equal(saved.mediaPolicy,'stop');
+    assert.equal(h.$('settings-data').hidden,false);
+  }finally{h.dispose();}
+});
+test('inline tools close with Escape and Help restores focus',async()=>{
+  const h=harness(hostScene());
+  try{
+    await h.settle();
+    h.$('time-menu').click();
+    h.$('time-menu-insert').focus();
+    assert.equal(h.$('command-tools').hidden,false);
+    assert.equal(h.$('overlay').hidden,true);
+    h.key('Escape');
+    assert.equal(h.$('command-tools').hidden,true);
+    assert.equal(h.document.activeElement,h.$('time-menu'));
+    h.$('open-help').focus();h.$('open-help').click();
+    assert.match(h.$('dialog-body').textContent,/Авто/);
+    h.key('Escape');
+    assert.equal(h.$('overlay').hidden,true);
+    assert.equal(h.document.activeElement,h.$('open-help'));
+  }finally{h.dispose();}
+});
+test('cold startup works with scoped evalFile and a detached global namespace',async()=>{const f=require('./host-fixture.cjs').fixture({unloaded:true,detachedGlobal:true}),h=harness(f);try{await h.settle();assert.equal(h.$('connection').textContent,'AE');assert.equal(f.ctx.FrameFlowCEP,undefined);assert.equal(f.ctx.$.global.FrameFlowCEP.version,'2.5.1');h.$('open-report').click();assert.match(h.copies[0],/Загрузчик: ready \/ ядро: 2\.5\.1/);assert.match(h.copies[0],/build 99/);assert.equal(f.writes(),0);}finally{h.dispose();}});
 test('connection failure stops background retries; explicit Refresh restores the compact controls',async()=>{const f=hostScene();let broken=true,calls=0;const h=harness(f,{transport(script,cb){calls++;if(broken)cb('EvalScript error.');else cb(vm.runInContext(script,f.ctx));}});try{await h.settle();assert.equal(calls,1);assert.equal(h.$('after-plus').disabled,true);h.focus();await new Promise(r=>setTimeout(r,2000));assert.equal(calls,1);h.$('open-report').click();assert.match(h.copies[0],/BOOT_EMPTY/);h.$('close-dialog').click();broken=false;h.$('refresh').click();await h.settle();assert.equal(h.$('connection').textContent,'AE');assert.equal(h.$('after-plus').disabled,false);}finally{h.dispose();}});
 test('invalid frame draft survives losing focus and a metadata refresh',async()=>{const f=hostScene(),h=harness(f);try{await h.settle();h.$('frames').focus();h.$('frames').value='';h.$('frames').dispatch('input');h.$('refresh').focus();h.$('refresh').click();await h.settle();assert.equal(h.$('frames').value,'');assert.equal(h.$('after-plus').disabled,true);h.document.querySelector('[data-step="5"]').click();assert.equal(Number(h.$('frames').value),5);assert.equal(h.$('after-plus').disabled,false);}finally{h.dispose();}});
 
-test('an upgraded panel visibly starts Auto and layers-and-keys while preserving the frame step',async()=>{const M=require('../extension/js/model.js'),h=harness(null,{savedPreferences:{...M.defaults,version:2,scope:'selected',mode:'keys',frames:5}});try{await h.settle();assert.equal(h.$('scope').textContent,'Авто');assert.match(h.$('mode').textContent,/Слои и ключи/);assert.equal(Number(h.$('frames').value),5);h.$('open-settings').click();assert.equal(h.$('dialog-body').querySelector('[data-toggle="rememberContext"]').checked,false);}finally{h.dispose();}});
-test('remember-context is explicit and preserves a selected-only startup',async()=>{const M=require('../extension/js/model.js'),h=harness(null,{savedPreferences:{...M.defaults,scope:'selected',mode:'selectedKeys',rememberContext:true}});try{await h.settle();assert.equal(h.$('scope').textContent,'Выделенные');assert.match(h.$('mode').textContent,/Выделенные ключи/);}finally{h.dispose();}});
-test('default media skip is visible in status, report and history and can be changed to stop',async()=>{const f=require('./host-fixture.cjs').fixture(),l=f.comp.items[0];l.source.duration=6;f.comp.items[1].inPoint=7;const original=JSON.stringify(l.keys),h=harness(f);try{await h.settle();h.document.querySelector('[data-step="5"]').click();h.$('after-plus').click();await h.settle();assert.match(h.$('status').textContent,/без запаса: 1/);assert.equal(h.$('status-icon').classList.contains('warning'),true);assert.equal(l.outPoint,6);assert.equal(JSON.stringify(l.keys),original);assert.ok(Math.abs(f.comp.items[1].inPoint-7-5/24)<1e-10);h.$('open-report').click();assert.match(h.copies[0],/MediaPolicy=skip/);assert.match(h.copies[0],/Последние события:[\s\S]*offset Готово · изменений: 1 · ключей сдвинуто: 3 · без запаса: 1/);h.$('close-dialog').click();h.$('open-settings').click();h.$('dialog-body').querySelectorAll('[data-pref]').find(b=>b.dataset.pref==='mediaPolicy'&&b.dataset.value==='stop').click();h.$('close-dialog').click();const writes=f.writes();h.$('after-plus').click();await h.settle();assert.match(h.$('status').textContent,/Строгая проверка/);assert.equal(f.writes(),writes);assert.equal(f.groups(),1);}finally{h.dispose();}});
+test('an upgraded panel visibly starts Auto and layers-and-keys while preserving the frame step',async()=>{const M=require('../extension/js/model.js'),h=harness(null,{savedPreferences:{...M.defaults,version:2,scope:'selected',mode:'keys',frames:5}});try{await h.settle();assert.equal(selectedOption(h,'scope','scope'),'auto');assert.equal(selectedOption(h,'mode','mode'),'offset');assert.equal(Number(h.$('frames').value),5);h.$('open-settings').click();assert.equal(h.$('dialog-body').querySelector('[data-toggle="rememberContext"]').checked,false);}finally{h.dispose();}});
+test('remember-context is explicit and preserves a selected-only startup',async()=>{const M=require('../extension/js/model.js'),h=harness(null,{savedPreferences:{...M.defaults,scope:'selected',mode:'selectedKeys',rememberContext:true}});try{await h.settle();assert.equal(selectedOption(h,'scope','scope'),'selected');assert.equal(selectedOption(h,'mode','mode'),'selectedKeys');}finally{h.dispose();}});
+test('default media skip is visible in status, report and history and can be changed to stop',async()=>{const f=require('./host-fixture.cjs').fixture(),l=f.comp.items[0];l.source.duration=6;f.comp.items[1].inPoint=7;const original=JSON.stringify(l.keys),h=harness(f);try{await h.settle();h.document.querySelector('[data-step="5"]').click();h.$('after-plus').click();await h.settle();assert.match(h.$('status').textContent,/без запаса: 1/);assert.equal(h.$('status-icon').classList.contains('warning'),true);assert.equal(l.outPoint,6);assert.equal(JSON.stringify(l.keys),original);assert.ok(Math.abs(f.comp.items[1].inPoint-7-5/24)<1e-10);h.$('open-report').click();assert.match(h.copies[0],/MediaPolicy=skip/);assert.match(h.copies[0],/Последние события:[\s\S]*offset Готово · изменений: 1 · ключей сдвинуто: 3 · без запаса: 1/);h.$('close-dialog').click();h.$('open-settings').click();settingsTab(h,'workflow');h.$('dialog-body').querySelectorAll('[data-pref]').find(b=>b.dataset.pref==='mediaPolicy'&&b.dataset.value==='stop').click();h.$('close-dialog').click();const writes=f.writes();h.$('after-plus').click();await h.settle();assert.match(h.$('status').textContent,/Строгая проверка/);assert.equal(f.writes(),writes);assert.equal(f.groups(),1);}finally{h.dispose();}});
 
-test('Plan menu leaves AE unchanged until the captured plan is applied',async()=>{const f=hostScene(),h=harness(f);try{await h.settle();mode(h,'layers');assert.equal(h.$('preview-toggle'),null);preview(h);await h.settle();assert.equal(f.groups(),0);assert.equal(f.comp.items[1].inPoint,6);assert.equal(h.$('offset-plan').hidden,false);assert.equal(h.$('apply-preview').disabled,false);h.$('apply-preview').click();await h.settle();assert.equal(f.comp.items[1].inPoint,6.5);assert.equal(f.groups(),1);assert.equal(h.$('offset-plan').hidden,true);}finally{h.dispose();}});
-test('gap has a Plan menu preview and applies its checked gap interval',async()=>{const f=hostScene(),h=harness(f);try{await h.settle();preview(h,'gap');await h.settle();assert.equal(f.groups(),0);assert.match(h.$('offset-plan').textContent,/Убрать паузу/);assert.equal(h.$('overlay').hidden,true);h.$('apply-preview').click();await h.settle();assert.equal(f.comp.items[1].inPoint,2);assert.equal(f.groups(),1);}finally{h.dispose();}});
+test('Preview leaves AE unchanged until the captured plan is applied',async()=>{const f=hostScene(),h=harness(f);try{await h.settle();mode(h,'layers');assert.equal(h.$('preview-toggle'),null);preview(h);await h.settle();assert.equal(f.groups(),0);assert.equal(f.comp.items[1].inPoint,6);assert.equal(h.$('offset-plan').hidden,false);assert.equal(h.$('apply-preview').disabled,false);h.$('apply-preview').click();await h.settle();assert.equal(f.comp.items[1].inPoint,6.5);assert.equal(f.groups(),1);assert.equal(h.$('offset-plan').hidden,true);}finally{h.dispose();}});
+test('gap has an inline preview and applies its checked gap interval',async()=>{const f=hostScene(),h=harness(f);try{await h.settle();preview(h,'gap');await h.settle();assert.equal(f.groups(),0);assert.match(h.$('offset-plan').textContent,/Убрать паузу/);assert.equal(h.$('overlay').hidden,true);h.$('apply-preview').click();await h.settle();assert.equal(f.comp.items[1].inPoint,2);assert.equal(f.groups(),1);}finally{h.dispose();}});
 test('changing CTI while the preview is open cannot apply a retargeted operation',async()=>{const f=hostScene(),h=harness(f);try{await h.settle();mode(h,'layers');preview(h);await h.settle();f.comp.time=9;h.$('apply-preview').click();await h.settle();assert.equal(f.groups(),0);assert.match(h.$('status').textContent,/устарел|изменил/);}finally{h.dispose();}});
 test('blocked media preview has no enabled Apply and gives reasons without copying diagnostics',async()=>{const f=require('./host-fixture.cjs').fixture(),l=f.comp.items[0];l.source.duration=6;f.comp.items[1].inPoint=7;const M=require('../extension/js/model.js'),h=harness(f,{savedPreferences:{...M.defaults,mediaPolicy:'stop'}});try{await h.settle();preview(h);await h.settle();assert.equal(h.$('apply-preview').disabled,true);const details=offsetDetails(h);assert.match(details.textContent,/Запись заблокирована/);assert.match(details.textContent,/Предел исходного медиа/);assert.equal(f.groups(),0);assert.equal(h.copies.length,0);h.$('plan-report').click();assert.match(h.$('report-text').value,/ПРОВЕРКА/);assert.equal(h.copies.length,1);}finally{h.dispose();}});
 test('preview escapes composition layer titles as text',async()=>{const f=hostScene();f.comp.items[1].name='<img src=x onerror=boom> Very long layer name';const h=harness(f);try{await h.settle();mode(h,'layers');preview(h);await h.settle();assert.equal(h.$('offset-plan-details-body').innerHTML,'');const details=offsetDetails(h);assert.match(details.textContent,/<img src=x onerror=boom>/);assert.equal(details.querySelector('img'),null);assert.equal(f.groups(),0);}finally{h.dispose();}});
 
-test('fresh English UI is compact and removes redundant visible controls',async()=>{const h=harness(null,{fresh:true});try{await h.settle();assert.equal(h.document.documentElement.getAttribute('lang'),'en');assert.match(h.$('scope').textContent,/Auto/);assert.match(h.$('mode').textContent,/Layers \+ Keys/);for(const id of ['scope-hint','cti-label','preview-toggle','mode-note'])assert.equal(h.$(id),null);assert.equal(h.document.querySelectorAll('[data-scope]').length,0);assert.equal(h.document.querySelectorAll('.shift-label').length,0);assert.equal(h.$('before-plus').textContent,'12');h.$('open-settings').click();assert.equal(h.$('dialog-title').textContent,'Settings');assert.match(h.$('dialog-body').textContent,/Language/);}finally{h.dispose();}});
-test('language switch immediately updates main UI, settings, help and report and persists v4',async()=>{const f=hostScene();f.comp.name='Маркеры композиции';const h=harness(f,{fresh:true});try{await h.settle();assert.equal(h.$('comp-name').textContent,'Маркеры композиции');h.$('open-settings').click();h.$('dialog-body').querySelectorAll('[data-pref]').find(b=>b.dataset.pref==='language'&&b.dataset.value==='ru').click();assert.equal(h.document.documentElement.getAttribute('lang'),'ru');assert.equal(h.$('dialog-title').textContent,'Настройки');h.$('close-dialog').click();assert.match(h.$('scope').textContent,/Авто/);h.$('open-help').click();assert.match(h.$('dialog-body').textContent,/Перенос/);h.$('close-dialog').click();h.$('open-report').click();assert.match(h.$('report-text').value,/Область:/);await new Promise(r=>setTimeout(r,250));const saved=JSON.parse([...h.storage.values()][0]);assert.equal(saved.language,'ru');assert.equal(saved.version,4);assert.equal(h.$('comp-name').textContent,'Маркеры композиции');}finally{h.dispose();}});
-test('English host status, report and blocked reasons contain no own Russian text',async()=>{const f=require('./host-fixture.cjs').fixture();f.comp.items[0].source.duration=6;f.comp.items[1].inPoint=7;const h=harness(f,{fresh:true});try{await h.settle();h.$('after-plus').click();await h.settle();assert.match(h.$('status').textContent,/Done/);h.$('open-report').click();assert.doesNotMatch(h.$('report-text').value,/[А-Яа-яЁё]/);h.$('close-dialog').click();h.$('open-settings').click();h.$('dialog-body').querySelectorAll('[data-pref]').find(b=>b.dataset.pref==='mediaPolicy'&&b.dataset.value==='stop').click();h.$('close-dialog').click();preview(h);await h.settle();const details=offsetDetails(h);assert.match(details.textContent,/Writing blocked/);assert.doesNotMatch(details.textContent,/[А-Яа-яЁё]/);}finally{h.dispose();}});
-test('Insert and Remove Time route through an explicit interval plan without immediate writes',async()=>{for(const action of ['insert','remove']){const f=hostScene(),h=harness(f,{fresh:true});try{await h.settle();menu(h,'time-menu',action);assert.equal(f.groups(),0);assert.match(h.$('dialog-title').textContent,action==='insert'?/Insert/:/Remove/);h.$('interval-preview').click();await h.settle();assert.equal(f.groups(),0);assert.equal(h.$('apply-preview').disabled,false);assert.match(h.$('dialog-body').textContent,/No layers or keys are deleted/);h.$('apply-preview').click();await h.settle();assert.equal(f.groups(),1);assert.equal(f.comp.items[1].inPoint,action==='insert'?6.5:5.5);}finally{h.dispose();}}});
+test('fresh English UI is compact and removes redundant visible controls',async()=>{const h=harness(null,{fresh:true});try{await h.settle();assert.equal(h.document.documentElement.getAttribute('lang'),'en');assert.match(h.$('scope').textContent,/Auto/);assert.equal(selectedOption(h,'mode','mode'),'offset');for(const id of ['scope-hint','cti-label','preview-toggle','mode-note'])assert.equal(h.$(id),null);assert.equal(h.document.querySelectorAll('[data-scope]').length,3);assert.equal(h.document.querySelectorAll('.shift-label').length,0);assert.equal(h.$('before-plus').textContent,'12');h.$('open-settings').click();assert.equal(h.$('dialog-title').textContent,'Settings');assert.match(h.$('dialog-body').textContent,/Language/);}finally{h.dispose();}});
+test('language switch immediately updates main UI, settings, help and report and persists v4',async()=>{const f=hostScene();f.comp.name='Маркеры композиции';const h=harness(f,{fresh:true});try{await h.settle();assert.equal(h.$('comp-name').textContent,'Маркеры композиции');h.$('open-settings').click();settingsTab(h,'data');h.$('dialog-body').querySelectorAll('[data-pref]').find(b=>b.dataset.pref==='language'&&b.dataset.value==='ru').click();assert.equal(h.document.documentElement.getAttribute('lang'),'ru');assert.equal(h.$('dialog-title').textContent,'Настройки');h.$('close-dialog').click();assert.match(h.$('scope').textContent,/Авто/);h.$('open-help').click();assert.match(h.$('dialog-body').textContent,/Перенос/);h.$('close-dialog').click();h.$('open-report').click();assert.match(h.$('report-text').value,/Область:/);await new Promise(r=>setTimeout(r,250));const saved=JSON.parse([...h.storage.values()][0]);assert.equal(saved.language,'ru');assert.equal(saved.version,4);assert.equal(h.$('comp-name').textContent,'Маркеры композиции');}finally{h.dispose();}});
+test('English host status, report and blocked reasons contain no own Russian text',async()=>{const f=require('./host-fixture.cjs').fixture();f.comp.items[0].source.duration=6;f.comp.items[1].inPoint=7;const h=harness(f,{fresh:true});try{await h.settle();h.$('after-plus').click();await h.settle();assert.match(h.$('status').textContent,/Done/);h.$('open-report').click();assert.doesNotMatch(h.$('report-text').value,/[А-Яа-яЁё]/);h.$('close-dialog').click();h.$('open-settings').click();settingsTab(h,'workflow');h.$('dialog-body').querySelectorAll('[data-pref]').find(b=>b.dataset.pref==='mediaPolicy'&&b.dataset.value==='stop').click();h.$('close-dialog').click();preview(h);await h.settle();const details=offsetDetails(h);assert.match(details.textContent,/Writing blocked/);assert.doesNotMatch(details.textContent,/[А-Яа-яЁё]/);}finally{h.dispose();}});
+test('Insert and Remove Time route through an explicit interval plan without immediate writes',async()=>{for(const action of ['insert','remove']){const f=hostScene(),h=harness(f,{fresh:true});try{await h.settle();tool(h,'time-menu',action);assert.equal(f.groups(),0);assert.match(h.$('dialog-title').textContent,action==='insert'?/Insert/:/Remove/);h.$('interval-preview').click();await h.settle();assert.equal(f.groups(),0);assert.equal(h.$('apply-preview').disabled,false);assert.match(h.$('dialog-body').textContent,/No layers or keys are deleted/);h.$('apply-preview').click();await h.settle();assert.equal(f.groups(),1);assert.equal(f.comp.items[1].inPoint,action==='insert'?6.5:5.5);}finally{h.dispose();}}});
 
 
 function kbarHarness(options={}){
@@ -247,10 +323,10 @@ test('time tools calculate exact steps and preview the cursor range before writi
     await h.settle();
     const field=h.$('frames');field.focus();field.value='(24+6)/2';field.dispatch('input');assert.equal(h.$('after-plus').disabled,true);
     field.dispatch('keydown',{key:'Enter',preventDefault(){}});assert.equal(Number(field.value),15);assert.equal(h.$('after-plus').disabled,false);
-    menu(h,'time-menu','time-zone');const end=h.$('zone-end');end.value='120';end.dispatch('input');
+    tool(h,'time-menu','time-zone');const end=h.$('zone-end');end.value='120';end.dispatch('input');
     assert.equal(f.comp.workAreaStart,0);h.$('use-zone').click();assert.equal(Number(field.value),24);assert.equal(f.groups(),0);
-    menu(h,'time-menu','time-zone');h.$('apply-zone').click();await h.settle();assert.equal(f.comp.workAreaStart,4);assert.equal(f.comp.workAreaDuration,1);
-    menu(h,'time-menu','measure-time');await h.settle();h.$('use-seam').click();assert.equal(Number(field.value),96);
+    tool(h,'time-menu','time-zone');h.$('apply-zone').click();await h.settle();assert.equal(f.comp.workAreaStart,4);assert.equal(f.comp.workAreaDuration,1);
+    tool(h,'time-menu','measure-time');await h.settle();h.$('use-seam').click();assert.equal(Number(field.value),96);
   }finally{h.dispose();}
 });
 
@@ -263,12 +339,12 @@ test('offset options inspect nested sources and import the actual selected key l
   const h=harness(f,{fresh:true});
   try{
     await h.settle();
-    h.$('open-settings').click();h.$('open-offset-options').click();
+    h.$('open-settings').click();settingsTab(h,'workflow');h.$('open-offset-options').click();
     h.$('use-selected-labels').click();await h.settle();
     assert.equal(h.$('dialog-body').querySelector('[data-label-id="9"]').getAttribute('aria-pressed'),'true');
     h.$('inspect-precomps').click();await h.settle();
     assert.match(h.$('dialog-body').innerHTML,/Child &lt;comp&gt;/);
-    h.$('hierarchy-depth').value='1';h.$('use-hierarchy-depth').click();
+    h.$('hierarchy-depth').querySelectorAll('input').forEach(input=>input.checked=input.value==='1');h.$('use-hierarchy-depth').click();
     assert.equal(Number(h.$('offset-depth').value),1);
     assert.equal(f.writes(),0);
   }finally{h.dispose();}
@@ -281,13 +357,13 @@ test('the reference picker lists only layers with markers and can clear an unava
   const h=harness(f,{fresh:true}),writes=f.writes();
   try{
     await h.settle();
-    menu(h,'time-menu','markerReference');await h.settle();
-    assert.equal(h.$('marker-layer').value,String(source.id));
+    tool(h,'time-menu','markerReference');await h.settle();
+    assert.equal(h.$('marker-layer').querySelectorAll('input').find(input=>input.checked).value,String(source.id));
     assert.doesNotMatch(h.$('dialog-body').innerHTML, /Layer 101/);
     h.$('set-marker-reference').click();await h.settle();
     assert.equal(f.state().markerReference.layerId,source.id);
     count=0;
-    menu(h,'time-menu','markerReference');await h.settle();
+    tool(h,'time-menu','markerReference');await h.settle();
     assert.equal(h.$('set-marker-reference').disabled,true);
     h.$('clear-marker-reference').click();await h.settle();
     assert.equal(f.state().markerReference,null);
@@ -319,10 +395,10 @@ test('quick steps can save the current value without changing other presets or e
     await h.settle();
     const field=h.$('frames');
     field.value='23';field.dispatch('input');
-    menu(h,'time-menu','favorite-step');
+    tool(h,'time-menu','favorite-step');
     assert.ok(h.document.querySelector('[data-step="23"]'));
     assert.ok(h.document.querySelector('[data-step="24"]'));
-    h.$('open-settings').click();
+    h.$('open-settings').click();settingsTab(h,'steps');
     assert.equal(h.$('save-quick-step').disabled,true);
     assert.equal(h.$('quick-step-values').value,'1, 2, 5, 10, 12, 24, 48, 23');
     assert.equal(f.groups(),0);

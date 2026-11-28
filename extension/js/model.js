@@ -1,18 +1,22 @@
 (function (root) {
   'use strict';
-  const VERSION = '2.5.0';
-  const defaults = {version:4, language:'en', theme:'dark', font:'system', fontSize:12, rowHeight:32, spacing:3, labelWidth:226, radius:6, accent:'#a7c7ff', motion:false, snap:true, autoRefresh:true, poll:1800, frames:12, mode:'offset', scope:'auto', compMarkers:false, mediaPolicy:'skip', depth:0, labelFilter:'off', labelIds:[], skipLocked:false, skipDisabled:false, skipUnsupported:false, skipProtected:false, rememberContext:false, units:'timecode', showKinds:true, contrast:'normal', quickSteps:[1,2,5,10,12,24,48]};
+  const VERSION = '2.5.1';
+  const defaults = {version:4, language:'en', theme:'dark', font:'system', fontSize:12, rowHeight:32, spacing:3, labelWidth:226, radius:6, accent:'#d7d7d7', motion:false, snap:true, autoRefresh:true, poll:1800, frames:12, mode:'offset', scope:'auto', compMarkers:false, mediaPolicy:'skip', depth:0, labelFilter:'off', labelIds:[], skipLocked:false, skipDisabled:false, skipUnsupported:false, skipProtected:false, rememberContext:false, units:'timecode', showKinds:true, contrast:'normal', quickSteps:[1,2,5,10,12,24,48]};
   const ranges = {depth:[-1,1000],fontSize:[11,16], rowHeight:[30,58], spacing:[0,12], labelWidth:[150,340], radius:[0,12], poll:[1000,5000], frames:[1,1000000]};
   const choices = {labelFilter:['off','protect','only'],language:['en','ru'],theme:['dark','light','host'],font:['system','sans','mono'],mode:['layers','keys','selectedKeys','offset','edges'],scope:['auto','selected','all'],mediaPolicy:['skip','stop'],units:['timecode','frames'],contrast:['normal','high']};
   function luminance(hex) { const channels=[1,3,5].map(n=>parseInt(hex.slice(n,n+2),16)/255).map(v=>v<=.04045?v/12.92:Math.pow((v+.055)/1.055,2.4)); return channels[0]*.2126+channels[1]*.7152+channels[2]*.0722; }
   function contrast(a,b) { const x=luminance(a),y=luminance(b);return (Math.max(x,y)+.05)/(Math.min(x,y)+.05); }
+  function gray(tone) { return '#' + tone.toString(16).padStart(2,'0').repeat(3); }
+  function accentTone(hex) {
+    const [r,g,b]=[1,3,5].map(n=>parseInt(hex.slice(n,n+2),16));
+    return Math.max(128,Math.round(r*.2126+g*.7152+b*.0722));
+  }
   function accentFor(hex,light) {
-    let channels=[1,3,5].map(n=>parseInt(hex.slice(n,n+2),16)),out=hex;
-    const surfaces=light?['#f4f4f5','#eaeaec','#ffffff']:['#17181a','#212225','#292a2e'];
-    const encode=c=>'#'+c.map(n=>n.toString(16).padStart(2,'0')).join('');
-    const tinted=bg=>encode([1,3,5].map((n,i)=>Math.round(parseInt(bg.slice(n,n+2),16)*.87+channels[i]*.13)));
-    while(surfaces.some(bg=>contrast(out,bg)<4.5||contrast(out,tinted(bg))<4.5)){
-      channels=channels.map(n=>light?Math.floor(n*.8):Math.ceil(n+(255-n)*.08));out=encode(channels);
+    let tone=accentTone(hex),out=gray(tone);
+    const surfaces=light?[244,234,255]:[23,33,41];
+    while(surfaces.some(bg=>contrast(out,gray(bg))<4.5||contrast(out,gray(Math.round(bg*.87+tone*.13)))<4.5)){
+      tone=light?Math.floor(tone*.8):Math.ceil(tone+(255-tone)*.08);
+      out=gray(tone);
     }
     return out;
   }
@@ -132,7 +136,7 @@
     else if(l.sourceDuration!==null&&!l.still) {lower=Math.max(lower,Math.min(l.inPoint,l.start));upper=Math.min(upper,Math.max(l.outPoint,l.start+l.sourceDuration*l.stretch/100));}
     return Math.max(lower,Math.min(upper,value));
   }
-  const api={VERSION,contrast,accentFor,defaults,ranges,choices,validate,startup,storage,parseFrameStep,parseSteps,effectiveScope,selected,frame,timecode,parseTime,snapDelta,trimLimit};
+  const api={VERSION,contrast,gray,accentTone,accentFor,defaults,ranges,choices,validate,startup,storage,parseFrameStep,parseSteps,effectiveScope,selected,frame,timecode,parseTime,snapDelta,trimLimit};
   if(typeof module==='object'&&module.exports) module.exports=api; else root.FFModel=api;
 }(typeof window==='object'?window:this));
 

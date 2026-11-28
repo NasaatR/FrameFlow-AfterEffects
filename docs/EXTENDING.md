@@ -1,20 +1,20 @@
 # Adding commands to FrameFlow
 
-FrameFlow is a command panel for the native AE timeline. Keep the main controls compact; use an existing menu for secondary commands. This is an internal source extension contract, not a runtime plugin loader or an arbitrary-script feature.
+FrameFlow is a command panel for the native AE timeline. Keep the main controls compact; use an existing inline group for secondary commands. This is an internal source extension contract, not a runtime plugin loader or an arbitrary-script feature.
 
 ## Owners and boundaries
 
 | Area | Owner | Add/change here |
 |---|---|---|
 | Command ID, English/Russian label, placement, arguments | `extension/js/commands.js` | One descriptor in `commands` before `create(groups, commands)` |
-| A new menu group | `groups` in the same file | Unique `id`, unique DOM `element`, English/Russian `title` |
-| Shared button/menu appearance and accessibility | `extension/js/ui.js`, `extension/css/panel.css` | Reuse `FFUI.actionButton` / `menuItem` and existing tokenized variants |
+| A new inline button group | `groups` in the same file | Unique `id`, unique DOM `element`, English/Russian `title` |
+| Shared button appearance and accessibility | `extension/js/ui.js`, `extension/css/panel.css` | Reuse `FFUI.actionButton` and existing tokenized variants |
 | Parameter forms | `showInterval` / `showArrange` in `extension/js/panel.js` | Reuse existing forms; a new input family needs a focused renderer and UI tests |
 | Host request validation and plan preparation | `src/commands/<name>.jsxinc` | One `registerPlan` call in the format below |
 | Timing calculations and native mutation/recovery | `FFCore` / `FFHost` in `src/core.jsxinc` | Extend these only when the new operation needs a new calculation, target kind or host API |
 | Common execution lifecycle | `src/panel-host.jsxinc` | Leave generic routing, plan cache, Apply, reports and one-shot transport shared |
 
-Toolbar and menu entries are generated automatically from the catalogue. Standard commands do not require new HTML, CSS or a dispatcher branch. The four fixed shift surfaces keep their existing markup. An operation can be exposed by several differently configured descriptors without duplicating the native implementation.
+Toolbar and inline group entries are generated automatically from the catalogue. The existing `surface: 'menu'` descriptor identifies a secondary group. Standard commands do not require new HTML, CSS or a dispatcher branch. The four fixed shift surfaces keep their existing markup. An operation can be exposed by several differently configured descriptors without duplicating the native implementation.
 
 ## Example: one button for an existing capability
 

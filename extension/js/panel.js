@@ -4,7 +4,7 @@
   const commandList=C.all(),commandGroups=C.groups(),shiftCommands=commandList.filter(c=>c.surface==='shift'),toolbarCommands=commandList.filter(c=>c.surface==='toolbar'),previewCommands=commandList.filter(c=>c.preview==='optional'&&c.form==='none');
   const groupedCommands=new Map(commandGroups.map(g=>[g.id,commandList.filter(c=>c.group===g.id)]));
   const appearanceKeys=new Set(['fontSize','rowHeight','spacing','radius','font','theme','accent','motion','contrast','language']);
-  let prefs,preferenceStore,saveTimer=null,saveError='',state=null,bridge=null,isDemo=false,disposed=false,pollTimer=null,busy=false,menuOwner=null,dialogFocus=null,lastReport='',history=[],readFailures=0,connectionFailed=false,frameDraft=false,quickDraft=null,activePreview=null,inlineFocus=null,statusRaw='',dialogRevision=0;
+  let prefs,preferenceStore,saveTimer=null,saveError='',state=null,bridge=null,isDemo=false,disposed=false,pollTimer=null,busy=false,toolGroup=null,previewArmed=false,settingsPage='appearance',settingsSaving=false,dialogFocus=null,lastReport='',history=[],readFailures=0,connectionFailed=false,frameDraft=false,quickDraft=null,activePreview=null,inlineFocus=null,statusRaw='',dialogRevision=0;
   const t=(en,ru)=>prefs.language==='ru'?ru:en,D=text=>FFText.message(text,prefs.language);
   const modeNames=()=>({offset:t('Layers + Keys','Слои и ключи'),edges:t('In/Out + Keys','In/Out и ключи'),layers:t('Whole Layers','Слои целиком'),keys:t('All Keys','Все ключи'),selectedKeys:t('Selected Keys','Выделенные ключи')});
   const modeNotes=()=>({offset:t('Between keys, shift only keys on the chosen side. Otherwise shift that side’s layers or crossing edges.','Между ключами сдвигаются только ключи выбранной стороны. В остальных случаях сдвигаются слои или их края.'),edges:t('On crossing layers, Before moves In and earlier keys. After moves Out and later keys. Opens a preview.','На пересекающем слое «До» сдвигает In и ранние ключи, «После» — Out и поздние. Открывает план.'),layers:t('Move the entire layer with all keys. The side is determined by its In point.','Перенос целого слоя со всеми ключами. Сторона определяется по In.'),keys:t('Move keys on the chosen side. Layer bounds stay unchanged.','Перенос ключей выбранной стороны без изменения границ слоя.'),selectedKeys:t('Only selected AE keys on the chosen side.','Только выделенные в AE ключи на выбранной стороне.')});
@@ -19,7 +19,18 @@
   function log(op,detail){history.push(new Date().toISOString()+' '+op+' '+String(detail||'').slice(0,350));if(history.length>40)history.shift();}
   function reportText(){const d=bridge&&bridge.diagnostics,env=state?state.environment:d&&d.environment;return 'FrameFlow '+M.VERSION+'\n'+(isDemo?t('DEMO · AE disconnected\n','ДЕМО · AE не подключён\n'):'')+(env?'AE '+env.ae+' / build '+env.build+'\nOS '+env.os+'\n'+(env.engine?'ExtendScript '+env.engine+'\n':''):t('AE: no confirmed connection\n','AE: нет подтверждённого соединения\n'))+(state?'Comp ID '+state.compId+' / FPS '+Number((1/state.frameDuration).toFixed(3))+' / CTI '+state.time+'\n':'')+t('Scope: ','Область: ')+prefs.scope+' / '+t('mode: ','режим: ')+prefs.mode+' / '+t('step: ','шаг: ')+prefs.frames+' / '+t('media: ','исходник: ')+prefs.mediaPolicy+'\n'+(d?t('Loader: ','Загрузчик: ')+d.stage+t(' / core: ',' / ядро: ')+(d.hostVersion||t('unconfirmed','не подтверждено'))+'\n':'')+(connectionFailed?t('Auto refresh paused until Refresh.\n','Автообновление приостановлено до «Обновить».\n'):'')+'\n'+D(lastReport)+'\n\n'+t('Recent events:\n','Последние события:\n')+D(history.join('\n'));}
   function preferenceError(message){saveError=message;status(message,true);const node=$('settings-status');if(node)node.textContent=D(message);}
-  function persist(){clearTimeout(saveTimer);saveTimer=setTimeout(()=>{try{preferenceStore.save(prefs);saveError='';if($('settings-status'))$('settings-status').textContent=t('Settings saved.','Настройки сохранены.');}catch(e){preferenceError(e.message);}},220);}
+  function settingsStatus(){
+    return D(saveError)||(settingsSaving?t('Saving…','Сохраняем…'):t('Changes save automatically','Изменения сохраняются автоматически'));
+  }
+  function persist(){
+    clearTimeout(saveTimer);settingsSaving=true;
+    if($('settings-status'))U.text($('settings-status'),settingsStatus());
+    saveTimer=setTimeout(()=>{
+      settingsSaving=false;
+      try{preferenceStore.save(prefs);saveError='';if($('settings-status'))U.text($('settings-status'),t('Saved','Сохранено'));}
+      catch(error){preferenceError(error.message);}
+    },220);
+  }
   function change(key,value){try{const next=M.validate(Object.assign({},prefs,{[key]:value})),a=prefs[key],b=next[key],same=Array.isArray(a)&&Array.isArray(b)?a.length===b.length&&a.every((v,i)=>v===b[i]):a===b;if(same){render();return true;}prefs=next;if(appearanceKeys.has(key))applyAppearance();persist();if(key==='quickSteps'||key==='language')renderPresets();render();if(key==='autoRefresh'||key==='poll')schedulePoll();return true;}catch(e){status(e.message,true);return false;}}
   function applyAppearance(){const style=document.documentElement.style;for(const [key,css,unit]of[['fontSize','font-size','px'],['rowHeight','row','px'],['spacing','gap','px'],['radius','radius','px']])style.setProperty('--'+css,prefs[key]+unit);style.setProperty('--font',prefs.font==='mono'?'"SFMono-Regular",Consolas,monospace':prefs.font==='sans'?'Arial,"Helvetica Neue",sans-serif':'system-ui,-apple-system,"Segoe UI",sans-serif');let light=prefs.theme==='light';if(prefs.theme==='host'&&window.__adobe_cep__){try{const c=JSON.parse(window.__adobe_cep__.getHostEnvironment()).appSkinInfo.panelBackgroundColor.color;light=c.red+c.green+c.blue>420;}catch(e){}}const accent=M.accentFor(prefs.accent,light);style.setProperty('--accent',accent);style.setProperty('--selected','rgba('+[1,3,5].map(n=>parseInt(accent.slice(n,n+2),16)).join(',')+',.13)');document.body.classList.toggle('light',light);document.body.classList.toggle('motion',prefs.motion);document.body.classList.toggle('high-contrast',prefs.contrast==='high');document.documentElement.setAttribute('lang',prefs.language);}
   function ready(){return !!state&&!busy&&!connectionFailed&&!bridge.uncertain;}
@@ -38,13 +49,36 @@
     if(!frameDraft&&document.activeElement!==$('frames'))$('frames').value=prefs.frames;
     $('frame-slider').value=Math.min(120,prefs.frames);$('frame-slider').title=t('Quick range: 1–120 frames. Current step: ','Быстрый диапазон: 1–120 кадров. Текущий шаг: ')+prefs.frames;
     document.querySelectorAll('[data-step]').forEach(b=>{b.classList.toggle('active',Number(b.dataset.step)===prefs.frames);b.setAttribute('aria-pressed',String(Number(b.dataset.step)===prefs.frames));});
-    const scopeNote=prefs.scope==='auto'?t('Selected AE layers, or all layers if none are selected.','Выделенные в AE слои; без выделения — все слои.'):prefs.scope==='all'?t('All composition layers.','Все слои композиции.'):selected?t('Selected AE layers.','Выделенные в AE слои.'):t('No selected layers. Select them in AE or choose Auto.','Нет выделенных слоёв. Выделите их в AE или выберите Авто.');
-    U.html($('scope'),esc(scopeNames()[prefs.scope])+icons('chevron'));$('scope').title=scopeNote;$('scope').setAttribute('aria-label',t('Scope: ','Область: ')+scopeNames()[prefs.scope]);$('scope').disabled=busy;
-    U.html($('mode'),esc(modeNames()[prefs.mode])+icons('chevron'));$('mode').disabled=busy;$('mode').title=modeNotes()[prefs.mode];$('mode').setAttribute('aria-label',t('Move: ','Переносить: ')+modeNames()[prefs.mode]);
+    $('scope').querySelectorAll('[data-scope]').forEach(b=>{
+      const key=b.dataset.scope;
+      b.title=key==='auto'
+        ?t('Selected layers, or all layers when none are selected.','Выделенные слои или все, если выделения нет.')
+        :key==='selected'&&!selected?t('No selected layers in AE.','Нет выделенных слоёв в AE.'):scopeNames()[key];
+      U.attribute(b,'aria-pressed',prefs.scope===key);b.disabled=busy;
+    });
+    const notes=modeNotes(),names=modeNames();
+    $('mode').querySelectorAll('[data-mode]').forEach(b=>{
+      const key=b.dataset.mode;
+      b.title=notes[key];U.attribute(b,'aria-label',names[key]);U.attribute(b,'aria-pressed',prefs.mode===key);b.disabled=busy;
+    });
     shiftCommands.forEach(c=>{const b=$(c.id);b.disabled=!available(c,eligibility);U.text(b.querySelector('.step-value'),prefs.frames);b.title=commandLabel(c)+' · '+(c.args.direction<0?t('Move earlier','Сдвинуть раньше'):t('Move later','Сдвинуть позже'))+t(' · Shift-click for a one-time step',' · Shift + щелчок для разового шага');b.setAttribute('aria-label',b.title);});
     toolbarCommands.forEach(c=>{const b=$(c.id);b.disabled=!available(c,eligibility);U.label(b,C.title(c,prefs.language));b.title=commandLabel(c);});
-    commandGroups.forEach(g=>{const b=$(g.element);b.disabled=g.id==='time'?!r:!groupedCommands.get(g.id).some(c=>available(c,eligibility));U.label(b,C.title(g,prefs.language));});
-    $('preview-plan').disabled=!previewCommands.some(c=>available(c,eligibility));$('refresh').disabled=busy;
+    commandGroups.forEach(g=>{
+      const b=$(g.element),actions=groupActions(g,eligibility);
+      b.disabled=g.id==='time'?!r:actions.every(action=>action.disabled);
+      U.label(b,C.title(g,prefs.language));
+      U.attribute(b,'aria-expanded',toolGroup===g);
+      $(g.element+'-actions').hidden=toolGroup!==g;
+      actions.forEach(action=>{
+        const control=$(g.element+'-'+action.id);
+        control.disabled=action.disabled;U.label(control,action.label);
+      });
+    });
+    const preview=$('preview-plan');
+    preview.disabled=!previewCommands.some(c=>available(c,eligibility));
+    U.attribute(preview,'aria-pressed',previewArmed);
+    preview.title=t('Preview shifts and Close Gap before applying','Проверять сдвиг и удаление паузы перед применением');
+    $('refresh').disabled=busy;
     if($('arrange-preview'))$('arrange-preview').disabled=busy||!!($('arrange-frames')&&$('arrange-frames').getAttribute('aria-invalid')==='true');
     if($('preview-without-conflicts'))$('preview-without-conflicts').disabled=!r;
     if($('apply-preview'))$('apply-preview').disabled=!r||isDemo||!activePreview||activePreview.blocked||activePreview.counts.changes===0;
@@ -63,7 +97,7 @@
     if(disposed||busy)return null;
     if(data.op!=='read'&&!ready()){status(t('Click Refresh to connect to AE.','Нажмите «Обновить» для подключения к AE.'),true);return null;}
     if(data.op!=='read'&&!data.skipKeyConflicts)closeInlinePlan(false);
-    const previewRevision=dialogRevision;closeMenu();busy=true;clearTimeout(pollTimer);render();if(!quiet)status(data.op==='read'?t('Reading AE…','Читаем AE…'):t('Checking AE…','Проверяем AE…'));
+    const previewRevision=dialogRevision;if(data.op!=='read')closeTools();busy=true;clearTimeout(pollTimer);render();if(!quiet)status(data.op==='read'?t('Reading AE…','Читаем AE…'):t('Checking AE…','Проверяем AE…'));
     let readCompleted=false;
     try{
       const live=!isDemo&&data.op==='offset'&&expectedToken===null&&expectedComp===null;
@@ -116,7 +150,8 @@
     if(!available(c))return null;
     if(c.form==='interval')return showInterval(c.args.action,id);
     if(c.form==='arrange')return showArrange(c.args.action,id);
-    const context=Object.assign({},prefs,overrides), payload=C.build(id,context,{},preview);
+    const context=Object.assign({},prefs,overrides);
+    const payload=C.build(id,context,{},preview===undefined&&previewArmed&&c.preview==='optional'?true:preview);
     if(c.op==='offset'){
       for(const key of ['depth','labelFilter','labelIds','skipLocked','skipDisabled','skipUnsupported','skipProtected'])payload[key]=context[key];
       if(context.depth!==0||state.markerReference||context.mode==='edges')payload.preview=true;
@@ -182,25 +217,44 @@
   }
   function setupCommandSurfaces(){
     toolbarCommands.forEach(c=>{const b=U.actionButton({id:c.id,text:C.title(c,prefs.language),symbol:c.icon,onClick:safe(()=>runCommand(c.id))});b.setAttribute('data-command',c.id);$('command-actions').append(b);});
-    commandGroups.forEach(g=>$('command-menus').append(U.actionButton({id:g.element,text:C.title(g,prefs.language),variant:'quiet',menu:true,onClick:()=>openMenu($(g.element),menuItems(g))})));
+    commandGroups.forEach(g=>{
+      const button=U.actionButton({id:g.element,text:C.title(g,prefs.language),onClick:()=>{
+        toolGroup=toolGroup===g?null:g;
+        $('command-tools').hidden=!toolGroup;
+        render();
+      }});
+      button.setAttribute('aria-controls',g.element+'-actions');
+      $('command-groups').append(button);
+      const actions=document.createElement('div');
+      actions.setAttribute('id',g.element+'-actions');actions.className='tool-actions';
+      groupActions(g,{ready:false,any:false,valid:true}).forEach(action=>{
+        const control=U.actionButton({id:g.element+'-'+action.id,text:action.label,onClick:safe(()=>{
+          closeTools(true);
+          return action.onClick();
+        })});
+        control.setAttribute('data-choice',action.id);actions.append(control);
+      });
+      $('command-tools').append(actions);
+    });
     shiftCommands.forEach(c=>{$(c.id).setAttribute('data-command',c.id);$(c.id).onclick=safe(e=>e&&e.shiftKey?promptShift(c,prefs.depth||0):runCommand(c.id));});
   }
-  function menuItems(group){
-    const items=groupedCommands.get(group.id).map(c=>({id:c.choice||c.id,label:commandLabel(c),disabled:!available(c),onClick:()=>runCommand(c.id)}));
+  function groupActions(group,eligibility){
+    const actions=groupedCommands.get(group.id).map(c=>({id:c.choice||c.id,label:commandLabel(c),disabled:!available(c,eligibility),onClick:()=>runCommand(c.id)}));
     if(group.id==='time'){
-      items.push({id:'markerReference',label:t('Marker reference…','Опорные маркеры…'),disabled:!ready()||isDemo,onClick:showMarkerReference});
-      items.push(...timeToolItems());
+      actions.push({id:'markerReference',label:t('Marker reference','Опорные маркеры'),disabled:!eligibility.ready||isDemo,onClick:showMarkerReference});
+      actions.push(...timeToolItems());
     }
-    return items;
+    return actions;
   }
-  function schedulePoll(){clearTimeout(pollTimer);if(disposed||connectionFailed||isDemo||!prefs.autoRefresh||!window.__adobe_cep__||!$('offset-plan').hidden)return;const delay=Math.min(30000,prefs.poll*Math.pow(2,Math.min(readFailures,5)));pollTimer=setTimeout(()=>{if(!busy&&!document.hidden&&$('overlay').hidden&&!menuOwner&&!document.querySelector('input:focus'))refresh(true);else schedulePoll();},document.hasFocus()?delay:Math.max(3000,delay));}
+  function schedulePoll(){clearTimeout(pollTimer);if(disposed||connectionFailed||isDemo||!prefs.autoRefresh||!window.__adobe_cep__||!$('offset-plan').hidden)return;const delay=Math.min(30000,prefs.poll*Math.pow(2,Math.min(readFailures,5)));pollTimer=setTimeout(()=>{if(!busy&&!document.hidden&&$('overlay').hidden&&!document.querySelector('input:focus'))refresh(true);else schedulePoll();},document.hasFocus()?delay:Math.max(3000,delay));}
   function safe(fn){return (...args)=>{try{return Promise.resolve(fn(...args)).catch(e=>status(e.message,true));}catch(e){status(e.message,true);}};}
-  function closeMenu(){if(menuOwner){menuOwner.setAttribute('aria-expanded','false');menuOwner=null;}$('menu').hidden=true;}
-  function openMenu(owner,items){
-    const was=menuOwner===owner;closeMenu();if(was)return;
-    menuOwner=owner;owner.setAttribute('aria-expanded','true');const menu=$('menu');menu.innerHTML='';
-    items.forEach(item=>menu.append(U.menuItem(item,safe(()=>{closeMenu();owner.focus();return item.onClick();}))));
-    menu.hidden=false;const rect=owner.getBoundingClientRect();menu.style.left=Math.max(8,Math.min(rect.left,innerWidth-menu.offsetWidth-8))+'px';menu.style.top=Math.max(8,Math.min(rect.bottom+5,innerHeight-menu.offsetHeight-8))+'px';const first=[...menu.querySelectorAll('button')].find(b=>!b.disabled);if(first)first.focus();
+  function closeTools(restoreFocus=false){
+    if(!toolGroup)return;
+    const owner=$(toolGroup.element);
+    $(toolGroup.element+'-actions').hidden=true;
+    U.attribute(owner,'aria-expanded',false);
+    toolGroup=null;$('command-tools').hidden=true;
+    if(restoreFocus)owner.focus();
   }
   function closeInlinePlan(restoreFocus=true){
     const plan=$('offset-plan');if(plan.hidden)return;
@@ -208,11 +262,16 @@
     if(restoreFocus&&inlineFocus&&document.contains(inlineFocus))inlineFocus.focus();
     inlineFocus=null;
   }
-  function openDialog(title,html){closeInlinePlan(false);dialogRevision++;closeMenu();activePreview=null;if($('overlay').hidden)dialogFocus=document.activeElement;$('dialog-title').textContent=title;$('dialog-body').innerHTML=html;const footer=$('dialog-footer'),actions=$('dialog-body').querySelector('.plan-actions,.operation-actions');footer.innerHTML='';footer.hidden=!actions;if(actions)footer.append(actions);$('overlay').hidden=false;$('dialog').focus();$('dialog-body').scrollTop=0;$('dialog-body').scrollLeft=0;}
+  function openDialog(title,html){$('dialog').classList.remove('settings-screen');$('settings-nav').hidden=true;closeInlinePlan(false);dialogRevision++;closeTools();activePreview=null;if($('overlay').hidden)dialogFocus=document.activeElement;$('dialog-title').textContent=title;$('dialog-body').innerHTML=html;const footer=$('dialog-footer'),actions=$('dialog-body').querySelector('.plan-actions,.operation-actions');footer.innerHTML='';footer.hidden=!actions;if(actions)footer.append(actions);$('overlay').hidden=false;$('dialog').focus();$('dialog-body').scrollTop=0;$('dialog-body').scrollLeft=0;}
   function closeDialog(){dialogRevision++;$('overlay').hidden=true;activePreview=null;if(dialogFocus&&document.contains(dialogFocus))dialogFocus.focus();schedulePoll();}
   function download(name,text){const a=document.createElement('a'),url=URL.createObjectURL(new Blob([text],{type:'application/json;charset=utf-8'}));a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),2000);}
-  function choice(key,choices){return '<div class="settings-choice">'+choices.map(([v,label])=>'<button data-pref="'+key+'" data-value="'+v+'" class="'+(prefs[key]===v?'active':'')+'" aria-pressed="'+(prefs[key]===v)+'">'+esc(label)+'</button>').join('')+'</div>';}
-  function range(key,label){const [min,max]=M.ranges[key];return '<div class="setting-row"><label for="pref-'+key+'">'+label+'</label><div class="range-wrap"><input id="pref-'+key+'" data-range="'+key+'" type="range" min="'+min+'" max="'+max+'" value="'+prefs[key]+'"><output>'+prefs[key]+'</output></div></div>';}
+  function choice(key,choices){return '<div class="settings-choice">'+choices.map(([v,label])=>'<button data-pref="'+key+'" data-value="'+v+'" aria-pressed="'+(prefs[key]===v)+'">'+esc(label)+'</button>').join('')+'</div>';}
+  function range(key,label,unit='px'){
+    const [min,max]=M.ranges[key];
+    return '<div class="setting-slider"><label for="pref-'+key+'">'+label+'</label>'+
+      '<div class="range-wrap"><input id="pref-'+key+'" data-range="'+key+'" type="range" min="'+min+'" max="'+max+'" step="1" value="'+prefs[key]+'">'+
+      '<input id="value-'+key+'" type="number" data-number="'+key+'" min="'+min+'" max="'+max+'" step="1" value="'+prefs[key]+'" aria-label="'+label+' ('+unit+')"><span>'+unit+'</span></div></div>';
+  }
   function toggle(key,label){return '<label class="setting-row"><span>'+label+'</span><input type="checkbox" data-toggle="'+key+'" '+(prefs[key]?'checked':'')+'></label>';}
   function showReport(autoCopy=false){
     openDialog(t('FrameFlow Report','Отчёт FrameFlow'),'<p class="note">'+t('The report stays on your computer. Review it before sharing.','Отчёт остаётся на вашем компьютере. Просмотрите его перед отправкой.')+'</p><textarea id="report-text" class="report-text" readonly aria-label="'+t('Report text','Текст отчёта')+'"></textarea><div class="settings-actions"><button id="copy-report" class="primary-button">'+t('Copy','Скопировать')+'</button><button id="export-report" class="secondary-button">'+t('Save TXT','Сохранить TXT')+'</button><span id="report-copy-state" class="note" role="status" aria-live="polite"></span></div>');
@@ -432,6 +491,13 @@
     $('offset-markers').onclick=safe(showMarkerReference);
     sync();
   }
+  function picker(id,legend,options,selected){
+    return '<fieldset id="'+id+'" class="pick-list"><legend>'+legend+'</legend>'+options.map(({value,label})=>
+      '<label><input type="radio" name="'+id+'" value="'+value+'"'+(value===selected?' checked':'')+'><span>'+esc(label)+'</span></label>').join('')+'</fieldset>';
+  }
+  function pickerValue(id){
+    return Number([...$(id).querySelectorAll('input')].find(input=>input.checked).value);
+  }
   async function showPrecompHierarchy(compId){
     const revision=dialogRevision;
     const result=await request({op:'inspectPrecomps',scope:prefs.scope},false,compId);
@@ -440,17 +506,15 @@
     const levels=[0,...new Set(rows.map(row=>row.depth))];
     if(rows.length)levels.push(-1);
     const defaultLevel=levels.includes(prefs.depth)?prefs.depth:0;
-    const options=levels.map(level=>'<option value="'+level+'"'+(defaultLevel===level?' selected':'')+'>'+
-      (level<0?t('All levels','Все уровни'):level===0?t('Current comp','Текущая композиция'):t('Depth ','Глубина ')+level)+'</option>').join('');
+    const options=levels.map(level=>({value:level,label:level<0?t('All levels','Все уровни'):level===0?t('Current comp','Текущая композиция'):t('Depth ','Глубина ')+level}));
     const items=rows.map(row=>'<div class="plan-target"><div class="plan-target-title"><strong>'+esc(row.source)+'</strong><span>'+
       t('Level ','Уровень ')+row.depth+'</span></div><p>'+esc(row.parent)+' / '+esc(row.instance)+(row.shared?' · '+t('Shared source','Общий источник'):'')+'</p></div>').join('');
     openDialog(t('Precomp hierarchy','Вложенные композиции'),'<p class="plan-context">'+esc(result.state.name)+' · '+esc(scopeNames()[prefs.scope])+'</p>'+
-      '<label for="hierarchy-depth">'+t('Offset depth','Глубина сдвига')+'</label><select id="hierarchy-depth" class="layer-picker">'+options+'</select><div class="operation-actions"><button id="use-hierarchy-depth" class="primary-button">'+t('Use this depth','Выбрать глубину')+'</button></div>'+
+      picker('hierarchy-depth',t('Offset depth','Глубина сдвига'),options,defaultLevel)+'<div class="operation-actions"><button id="use-hierarchy-depth" class="primary-button">'+t('Use this depth','Выбрать глубину')+'</button></div>'+
       (rows.length?'<div class="plan-targets">'+items+'</div>':'<p class="note">'+t('No precomps in this scope.','В этой области нет прекомпозиций.')+'</p>')+
       (limited?'<p class="note">'+t('The list is capped. Narrow the layer scope to inspect more detail.','Список ограничен. Сузьте область слоёв для подробного просмотра.')+'</p>':''));
-    $('hierarchy-depth').value=String(defaultLevel);
     $('use-hierarchy-depth').onclick=()=>{
-      change('depth',Number($('hierarchy-depth').value));
+      change('depth',pickerValue('hierarchy-depth'));
       showOffsetOptions();
     };
   }
@@ -462,14 +526,13 @@
     const reference=result.state.markerReference, guides=result.guides;
     const preferred=guides.find(l=>reference&&l.id===reference.layerId)||guides.find(l=>l.selected)||guides[0];
     const activeId=preferred?preferred.id:null;
-    const options=guides.map(l=>'<option value="'+l.id+'"'+(l.id===activeId?' selected':'')+'>#'+l.index+' · '+esc(l.name)+' ('+l.count+')</option>').join('');
+    const options=guides.map(layer=>({value:layer.id,label:'#'+layer.index+' · '+layer.name+' ('+layer.count+')'}));
     openDialog(t('Marker reference','Опорные маркеры'),
       '<p class="plan-context">'+esc(state.name)+'</p><p class="note">'+t('Choose a layer with markers. Each marker defines a Before/After boundary and contributes one step. The reference layer stays in place.','Выберите слой с маркерами. Каждый маркер задаёт границу «До/После» и добавляет один шаг сдвига. Опорный слой остаётся на месте.')+'</p>'+
       (reference?'<p>'+t('Current reference · ','Опорный слой · ')+esc(reference.name)+' ('+reference.count+')</p>':'')+
-      (options?'<label for="marker-layer">'+t('Reference layer','Слой с маркерами')+'</label><select id="marker-layer" class="layer-picker">'+options+'</select>':'<p class="note">'+t('Add at least one layer marker in AE to pick a reference.','Добавьте хотя бы один маркер на слой в AE.')+'</p>')+
-      '<p id="marker-status" class="settings-status" role="status"></p><div class="operation-actions"><button id="set-marker-reference" class="primary-button" '+(options?'':'disabled')+'>'+t('Use layer markers','Использовать маркеры')+'</button>'+
+      (options.length?picker('marker-layer',t('Reference layer','Слой с маркерами'),options,activeId):'<p class="note">'+t('Add at least one layer marker in AE to pick a reference.','Добавьте хотя бы один маркер на слой в AE.')+'</p>')+
+      '<p id="marker-status" class="settings-status" role="status"></p><div class="operation-actions"><button id="set-marker-reference" class="primary-button" '+(options.length?'':'disabled')+'>'+t('Use layer markers','Использовать маркеры')+'</button>'+
       '<button id="clear-marker-reference" class="secondary-button" '+(reference?'':'disabled')+'>'+t('Clear reference','Убрать привязку')+'</button></div>');
-    const picker=$('marker-layer');if(activeId!==null)picker.value=String(activeId);
     async function update(payload){
       const revision=dialogRevision;
       const result=await request(payload,false,compId);
@@ -477,13 +540,13 @@
       if(result&&!result.failure){closeDialog();return;}
       $('marker-status').textContent=D(statusRaw);
     }
-    $('set-marker-reference').onclick=safe(()=>update({op:'setMarkerReference',layerId:Number(picker.value)}));
+    $('set-marker-reference').onclick=safe(()=>update({op:'setMarkerReference',layerId:pickerValue('marker-layer')}));
     $('clear-marker-reference').onclick=safe(()=>update({op:'clearMarkerReference'}));
   }
   function saveCurrentStep(){
     const step=readFrames();
     if(prefs.quickSteps.includes(step))return;
-    const edit=$('quick-step-values'), feedback=$('settings-status');
+    const edit=$('quick-step-values'), feedback=$('steps-feedback');
     if(edit&&edit.getAttribute('aria-invalid')==='true'){
       feedback.textContent=t('Correct the Quick Steps list before adding to it.','Исправьте список быстрых шагов перед добавлением.');
       edit.focus();
@@ -503,22 +566,158 @@
     }
     status(t('Added to Quick Steps: ','Добавлено в быстрые шаги: ')+step);
   }
-  function showSettings(){
-    openDialog(t('Settings','Настройки'),'<h3>'+t('Language','Язык')+'</h3>'+choice('language',[['en','English'],['ru','Русский']])+'<h3>'+t('Workflow','Работа')+'</h3><div class="settings-grid">'+toggle('rememberContext',t('Remember scope and mode','Запоминать область и режим'))+toggle('autoRefresh',t('Refresh from AE automatically','Обновлять сведения из AE'))+toggle('compMarkers',t('Move composition markers','Переносить маркеры композиции'))+'</div><button id="open-offset-options" class="secondary-button">'+t('Offset options…','Параметры сдвига…')+'</button><p class="note">'+t('Starts in Auto · Layers + Keys unless remembered. Step and appearance are always saved.','Без запоминания открывается Авто · Слои и ключи. Шаг и внешний вид сохраняются всегда.')+'</p><p class="setting-label">'+t('When source handles run out','Если закончились кадры исходника')+'</p>'+choice('mediaPolicy',[['skip',t('Keep This Layer','Оставить этот слой')],['stop',t('Cancel All','Отменить всё')]])+'<p class="note">'+t('Skipped layers keep all their keys. Other available targets move.','Пропущенный слой и все его ключи остаются на месте. Остальные доступные цели сдвигаются.')+'</p><h3>'+t('Appearance','Внешний вид')+'</h3><p class="setting-label">'+t('Theme','Тема')+'</p>'+choice('theme',[['dark',t('Dark','Тёмная')],['light',t('Light','Светлая')],['host',t('Follow AE','Как в AE')]])+'<p class="setting-label">'+t('Font','Шрифт')+'</p>'+choice('font',[['system',t('System','Системный')],['sans','Arial'],['mono',t('Mono','Моно')]])+'<div class="settings-grid">'+range('fontSize',t('Text size','Размер текста'))+range('rowHeight',t('Shift button height','Размер кнопок сдвига'))+range('spacing',t('Button spacing','Интервал кнопок'))+range('radius',t('Corner radius','Скругление'))+'<label class="setting-row"><span>'+t('Accent','Акцент')+'</span><input id="pref-accent" type="color" value="'+prefs.accent+'"></label>'+toggle('motion',t('Window animation','Анимация окон'))+'<label class="setting-row"><span>'+t('High contrast','Повышенный контраст')+'</span><input type="checkbox" data-contrast="true" '+(prefs.contrast==='high'?'checked':'')+'></label></div><p class="setting-label">'+t('Density','Плотность')+'</p><div class="settings-choice"><button data-preset="compact">'+t('Compact','Компактно')+'</button><button data-preset="balanced">'+t('Balanced','Обычно')+'</button><button data-preset="large">'+t('Large','Крупнее')+'</button></div><h3>'+t('Quick Steps','Быстрые шаги')+'</h3><label class="note" for="quick-step-values">'+t('Up to 8 frame values, separated by commas','До 8 значений в кадрах, через запятую')+'</label><input id="quick-step-values" class="quick-step-setting" value="'+esc(quickDraft===null?prefs.quickSteps.join(', '):quickDraft)+'"><button id="save-quick-step" class="secondary-button">'+t('Save current step','Добавить текущий шаг')+'</button><p id="settings-status" class="settings-status" role="status">'+esc(D(saveError)||t('Changes save automatically.','Изменения сохраняются автоматически.'))+'</p><div class="settings-actions"><button id="export-settings" class="secondary-button">'+t('Export JSON','Экспорт JSON')+'</button><button id="import-settings" class="secondary-button">'+t('Import','Импорт')+'</button><button id="reset-appearance" class="quiet-button">'+t('Reset Appearance','Сбросить вид')+'</button></div>');
-    $('open-offset-options').onclick=showOffsetOptions;
-    const saveStep=$('save-quick-step');
-    const syncSaveStep=()=>{saveStep.disabled=!validFrames()||prefs.quickSteps.includes(prefs.frames);};
-    saveStep.onclick=safe(saveCurrentStep);syncSaveStep();
-    const body=$('dialog-body');body.querySelectorAll('[data-pref]').forEach(b=>b.onclick=()=>{const key=b.dataset.pref;if(!change(key,b.dataset.value))return;if(key==='language'){showSettings();const active=[...$('dialog-body').querySelectorAll('[data-pref]')].find(el=>el.dataset.pref==='language'&&el.dataset.value===prefs.language);if(active)active.focus();return;}body.querySelectorAll('[data-pref]').forEach(el=>{el.classList.toggle('active',prefs[el.dataset.pref]===el.dataset.value);el.setAttribute('aria-pressed',String(prefs[el.dataset.pref]===el.dataset.value));});});
-    body.querySelectorAll('[data-range]').forEach(el=>el.oninput=()=>{if(change(el.dataset.range,Number(el.value)))el.nextElementSibling.textContent=el.value;});body.querySelectorAll('[data-toggle]').forEach(el=>el.onchange=()=>change(el.dataset.toggle,el.checked));body.querySelector('[data-contrast]').onchange=e=>change('contrast',e.target.checked?'high':'normal');$('pref-accent').oninput=e=>change('accent',e.target.value);
-    $('quick-step-values').oninput=e=>{quickDraft=e.target.value;try{change('quickSteps',M.parseSteps(e.target.value));e.target.setAttribute('aria-invalid','false');syncSaveStep();}catch(error){e.target.setAttribute('aria-invalid','true');$('settings-status').textContent=D(error.message);}};
-    body.querySelectorAll('[data-preset]').forEach(b=>b.onclick=()=>{const values={compact:{rowHeight:30,fontSize:11,spacing:2},balanced:{rowHeight:32,fontSize:12,spacing:3},large:{rowHeight:48,fontSize:14,spacing:6}}[b.dataset.preset];prefs=M.validate(Object.assign({},prefs,values));applyAppearance();persist();render();showSettings();});
-    $('reset-appearance').onclick=()=>{for(const k of ['theme','font','fontSize','rowHeight','spacing','radius','accent','motion','contrast'])prefs[k]=M.defaults[k];applyAppearance();persist();render();showSettings();};$('export-settings').onclick=()=>download('FrameFlow-settings-v4.json',JSON.stringify(prefs,null,2));$('import-settings').onclick=()=>$('import-file').click();
+  function showSettings(page=settingsPage,focusId){
+    const tabs={appearance:t('Appearance','Вид'),workflow:t('Workflow','Работа'),steps:t('Quick Steps','Шаги'),data:t('Data','Данные')};
+    const section=(title,html)=>'<section class="settings-card"><h3>'+title+'</h3>'+html+'</section>';
+    const panel=(key,html)=>'<section id="settings-'+key+'" data-settings-page="'+key+'" aria-label="'+tabs[key]+'" class="settings-layout">'+html+'</section>';
+    const label=(text,html)=>'<p class="setting-label">'+text+'</p>'+html;
+    const appearance=
+      section(t('Theme & text','Тема и текст'),
+        label(t('Theme','Тема'),choice('theme',[['dark',t('Dark','Тёмная')],['light',t('Light','Светлая')],['host',t('Follow AE','Как в AE')]]))+
+        label(t('Font','Шрифт'),choice('font',[['system',t('System','Системный')],['sans','Arial'],['mono',t('Mono','Моно')]]))+
+        range('fontSize',t('Text size','Размер текста'))+
+        '<div class="setting-slider"><label for="pref-accent">'+t('Accent tone','Тон акцента')+'</label><div class="range-wrap"><input id="pref-accent" type="range" min="128" max="255" step="1" value="'+M.accentTone(prefs.accent)+'"><span class="accent-sample" aria-hidden="true"></span></div></div>'+
+        '<label class="setting-row"><span>'+t('High contrast','Повышенный контраст')+'</span><input type="checkbox" data-contrast="true" '+(prefs.contrast==='high'?'checked':'')+'></label>')+
+      section(t('Controls','Элементы управления'),
+        '<div class="settings-choice"><button data-preset="compact">'+t('Compact','Компактно')+'</button><button data-preset="balanced">'+t('Balanced','Обычно')+'</button><button data-preset="large">'+t('Large','Крупно')+'</button></div>'+
+        range('rowHeight',t('Shift button height','Высота кнопок сдвига'))+
+        range('spacing',t('Button spacing','Интервал кнопок'))+
+        range('radius',t('Corner radius','Скругление'))+
+        toggle('motion',t('Panel animation','Анимация панели'))+
+        '<div id="appearance-sample" class="action-pair" aria-label="'+t('Shift button preview','Пример кнопок сдвига')+'"><span class="shift-button shift-value">'+icons('left')+prefs.frames+'</span><span class="shift-button shift-value">'+prefs.frames+icons('right')+'</span></div>'+
+        '<button id="reset-appearance" class="quiet-button">'+t('Reset appearance','Сбросить внешний вид')+'</button>');
+    const workflow=
+      section(t('Offset behavior','Поведение сдвига'),
+        toggle('rememberContext',t('Remember scope and mode','Запоминать область и режим'))+
+        toggle('compMarkers',t('Move composition markers','Переносить маркеры композиции'))+
+        label(t('When source handles run out','Если закончились кадры исходника'),choice('mediaPolicy',[['skip',t('Keep this layer','Оставить слой')],['stop',t('Cancel all','Отменить всё')]]))+
+        '<button id="open-offset-options" class="secondary-button">'+t('Filters, labels & precomps','Фильтры, метки и прекомпы')+'</button>')+
+      section(t('After Effects sync','Связь с After Effects'),
+        toggle('autoRefresh',t('Refresh automatically','Обновлять автоматически'))+
+        range('poll',t('Refresh interval','Интервал обновления'),'ms'));
+    const steps=section(t('Quick Steps','Быстрые шаги'),
+      '<label for="quick-step-values">'+t('Up to 8 frame values, separated by commas','До 8 значений в кадрах через запятую')+'</label>'+
+      '<input id="quick-step-values" class="quick-step-setting" value="'+esc(quickDraft===null?prefs.quickSteps.join(', '):quickDraft)+'" aria-describedby="steps-feedback">'+
+      '<button id="save-quick-step" class="secondary-button">'+t('Add current step','Добавить текущий шаг')+'</button><p id="steps-feedback" class="settings-status" role="status"></p>');
+    const data=section(t('Language','Язык'),choice('language',[['en','English'],['ru','Русский']]))+
+      section(t('Backup & transfer','Резервная копия и перенос'),
+        '<div class="settings-choice"><button id="export-settings">'+t('Export settings','Экспорт настроек')+'</button><button id="import-settings">'+t('Import JSON','Импорт JSON')+'</button><button id="copy-appearance">'+t('Copy appearance','Скопировать внешний вид')+'</button></div>'+
+        '<textarea id="appearance-json" class="appearance-json" aria-label="'+t('Appearance JSON','Внешний вид в JSON')+'" readonly hidden></textarea><p id="copy-appearance-status" class="settings-status" role="status"></p>'+
+        '<p class="note">FrameFlow '+M.VERSION+' · Made by Nasaat</p>');
+    openDialog(t('Settings','Настройки'),panel('appearance',appearance)+panel('workflow',workflow)+panel('steps',steps)+panel('data',data));
+    $('dialog').classList.add('settings-screen');
+    const footer=$('dialog-footer');
+    footer.innerHTML='<p id="settings-status" class="settings-status" role="status">'+esc(settingsStatus())+'</p>';footer.hidden=false;
+    const nav=$('settings-nav');
+    nav.innerHTML=Object.entries(tabs).map(([key,title])=>'<button data-settings-tab="'+key+'" aria-controls="settings-'+key+'">'+title+'</button>').join('');
+    nav.setAttribute('aria-label',t('Settings categories','Категории настроек'));
+    nav.hidden=false;
+    const body=$('dialog-body');
+    function selectPage(key){
+      settingsPage=key;
+      body.querySelectorAll('[data-settings-page]').forEach(group=>group.hidden=group.dataset.settingsPage!==key);
+      nav.querySelectorAll('[data-settings-tab]').forEach(b=>U.attribute(b,'aria-pressed',b.dataset.settingsTab===key));
+      body.scrollTop=0;
+    }
+    nav.querySelectorAll('[data-settings-tab]').forEach(b=>b.onclick=()=>selectPage(b.dataset.settingsTab));
+    selectPage(page);
+    const openOptions=$('open-offset-options');
+    openOptions.onclick=showOffsetOptions;
+    const saveStep=$('save-quick-step'),stepsInput=$('quick-step-values');
+    function syncSaveStep(){saveStep.disabled=!validFrames()||prefs.quickSteps.includes(prefs.frames)||stepsInput.getAttribute('aria-invalid')==='true';}
+    saveStep.onclick=safe(saveCurrentStep);
+    stepsInput.oninput=()=>{
+      quickDraft=stepsInput.value;
+      try{change('quickSteps',M.parseSteps(quickDraft));stepsInput.setAttribute('aria-invalid','false');$('steps-feedback').textContent='';}
+      catch(error){stepsInput.setAttribute('aria-invalid','true');$('steps-feedback').textContent=D(error.message);}
+      syncSaveStep();
+    };
+    if(quickDraft!==null){
+      try{M.parseSteps(quickDraft);}
+      catch(error){stepsInput.setAttribute('aria-invalid','true');$('steps-feedback').textContent=D(error.message);}
+    }
+    syncSaveStep();
+    const choices=body.querySelectorAll('[data-pref]');
+    choices.forEach(b=>b.onclick=()=>{
+      const key=b.dataset.pref;
+      if(!change(key,b.dataset.value))return;
+      if(key==='language'){
+        showSettings('data');
+        [...$('dialog-body').querySelectorAll('[data-pref]')].find(el=>el.dataset.pref===key&&el.dataset.value===prefs[key]).focus();
+        return;
+      }
+      choices.forEach(el=>U.attribute(el,'aria-pressed',prefs[el.dataset.pref]===el.dataset.value));
+    });
+    body.querySelectorAll('[data-range]').forEach(slider=>{
+      const key=slider.dataset.range,field=$('value-'+key),[min,max]=M.ranges[key];
+      slider.oninput=()=>{
+        if(change(key,Number(slider.value))){field.value=slider.value;field.setAttribute('aria-invalid','false');}
+      };
+      field.oninput=()=>{
+        const value=Number(field.value),valid=/^\d+$/.test(field.value)&&value>=min&&value<=max;
+        field.setAttribute('aria-invalid',String(!valid));
+        if(valid&&change(key,value))slider.value=field.value;
+      };
+    });
+    body.querySelectorAll('[data-toggle]').forEach(el=>el.onchange=()=>change(el.dataset.toggle,el.checked));
+    body.querySelector('[data-contrast]').onchange=e=>change('contrast',e.target.checked?'high':'normal');
+    $('pref-accent').oninput=e=>change('accent',M.gray(Number(e.target.value)));
+    const presets={compact:{rowHeight:30,fontSize:11,spacing:2},balanced:{rowHeight:32,fontSize:12,spacing:3},large:{rowHeight:48,fontSize:15,spacing:6}};
+    body.querySelectorAll('[data-preset]').forEach(b=>b.onclick=()=>{
+      prefs=M.validate(Object.assign({},prefs,presets[b.dataset.preset]));
+      applyAppearance();persist();render();showSettings('appearance');
+      $('dialog-body').querySelector('[data-preset="'+b.dataset.preset+'"]').focus();
+    });
+    $('reset-appearance').onclick=()=>{
+      for(const key of appearanceKeys)if(key!=='language')prefs[key]=M.defaults[key];
+      applyAppearance();persist();render();showSettings('appearance','reset-appearance');
+    };
+    $('export-settings').onclick=()=>download('FrameFlow-settings-v4.json',JSON.stringify(prefs,null,2));
+    $('import-settings').onclick=()=>$('import-file').click();
+    $('copy-appearance').onclick=safe(copyAppearance);
+    if(focusId)$(focusId).focus();
   }
-  function showHelp(){openDialog(t('How FrameFlow Works','Как работает FrameFlow'),'<p class="help-text"><strong>'+t('1. Place the cursor in AE.','1. Поставьте курсор в таймлайне AE.')+'</strong><br>'+t('Choose a frame step using presets, slider or − / +. Shift changes it by 10; the wheel works over the focused number.','Выберите шаг кнопкой, ползунком или − / +. Shift меняет шаг на 10 кадров; колесо работает над активным числом.')+'</p><p class="help-text"><strong>'+t('2. Scope defaults to Auto.','2. По умолчанию — Авто.')+'</strong><br>'+t('Auto uses selected AE layers, or all layers when none are selected. Selected never expands an empty selection.','Авто использует выделенные в AE слои; без выделения — всю композицию. «Выделенные» без выделения не расширяет область.')+'</p><p class="help-text"><strong>'+t('3. Choose Before or After cursor, then an arrow.','3. Выберите До или После курсора и стрелку.')+'</strong><br>'+t('Left moves earlier; right moves later. Before excludes a key at the cursor; After includes it. Each action reads the current AE cursor and selection.','Влево — раньше, вправо — позже. «До» не включает ключ на курсоре; «После» включает. Перед действием курсор и выделение перечитываются из AE.')+'</p><p class="help-text">'+Object.keys(modeNames()).map(k=>'<strong>'+esc(modeNames()[k])+':</strong> '+esc(modeNotes()[k])).join('<br>')+'</p><p class="help-text"><strong>'+t('Close Gap','Убрать паузу')+'</strong> — '+t('removes the empty gap under the cursor, independent of step and mode. Plan offers a preview for any direction or Close Gap. Apply Plan executes only the checked targets.','удаляет пустой промежуток под курсором независимо от шага и режима. Меню «План» проверяет любое направление или удаление паузы. «Применить план» выполняет только проверенные изменения.')+'</p><p class="help-text"><strong>'+t('Time → Insert / Remove','Время → Вставить / Удалить')+'</strong> — '+t('shifts later layers by the frame step. Keep leaves crossing layers intact; Retime Animation changes eligible animation only. Footage crossings need a manual AE split. No layers or keys are deleted; composition duration stays unchanged. Always preview the interval before applying.','сдвигает последующие слои на выбранный шаг. «Оставить» сохраняет пересекающие слои целиком. «Изменить анимацию» меняет только доступную анимацию. Видео и аудио на пересечении требуют ручного разделения в AE. Слои и ключи не удаляются; длительность композиции не меняется. Перед применением всегда показывается план.')+'</p><p class="help-text"><strong>Arrange</strong> — '+t('Align In/Out to the cursor, Stagger layer starts or Sequence end to end with a gap. Set Top → Bottom, Bottom → Top or Start Time order and the cursor/first-layer anchor. Whole layers and all native keys move together. Preview is required; composition markers and duration stay unchanged.','Выравнивание начала/конца к курсору, лесенка начал или последовательность с зазором. Выберите порядок сверху, снизу или по началу и точку отсчёта — курсор либо первый слой. Целые слои и все нативные ключи перемещаются вместе. Требуется план; маркеры и длительность композиции не меняются.')+'</p><p class="help-text">'+t('Insufficient footage or precomp handles keep that entire layer in place by default. Settings can cancel the entire operation instead. Locked targets and key collisions block writing. Undo / Redo in AE. R refreshes; ? opens Help. Report opens and copies the diagnostics.','Если кадров видео или прекомпа не хватает, слой по умолчанию остаётся на месте. В настройках можно выбрать «Отменить всё». Блокировки и коллизии ключей запрещают запись. Undo / Redo выполняйте в AE. R обновляет сведения; ? открывает справку. «Отчёт» открывает и копирует диагностику.')+'</p><p class="note">FrameFlow '+M.VERSION+' · Made by Nasaat</p>');}
+  async function importSettings(event){
+    const file=event.target.files[0],revision=dialogRevision;
+    if(!file)return;
+    try{
+      if(file.size>20000)throw Error(t('Settings file exceeds 20 KB.','Файл настроек превышает 20 КБ.'));
+      const data=JSON.parse(await file.text());
+      if(revision!==dialogRevision||$('overlay').hidden||!$('dialog').classList.contains('settings-screen'))return;
+      if(data&&data.type==='FrameFlow appearance'){
+        const values=data.values;
+        if(data.version!==1||!values||Array.isArray(values)||typeof values!=='object'||Object.keys(values).some(k=>k==='language'||!appearanceKeys.has(k))){
+          throw Error(t('Unsupported appearance file.','Неподдерживаемый файл внешнего вида.'));
+        }
+        prefs=M.validate(Object.assign({},prefs,values));
+      }else{
+        prefs=M.validate(data);quickDraft=null;frameDraft=false;
+        $('frames').value=prefs.frames;
+      }
+      applyAppearance();persist();renderPresets();render();showSettings('data','import-settings');
+    }catch(error){if(revision===dialogRevision)preferenceError(error.message);}
+    finally{event.target.value='';}
+  }
+  async function copyAppearance(){
+    const values={};
+    for(const key of appearanceKeys)if(key!=='language')values[key]=key==='accent'?M.gray(M.accentTone(prefs.accent)):prefs[key];
+    const field=$('appearance-json'),feedback=$('copy-appearance-status'),button=$('copy-appearance');
+    const text=JSON.stringify({type:'FrameFlow appearance',version:1,values},null,2);
+    field.value=text;field.hidden=false;field.focus();field.select();
+    let copied=false;
+    try{copied=document.execCommand('copy');}catch(ignored){}
+    if(!copied){
+      try{await navigator.clipboard.writeText(text);copied=true;}catch(ignored){}
+    }
+    if(!document.contains(feedback))return;
+    field.hidden=copied;
+    if(copied)button.focus();
+    U.text(feedback,copied?t('Appearance copied','Внешний вид скопирован'):t('Text selected. Press Ctrl/Cmd+C.','Текст выделен. Нажмите Ctrl/Cmd+C.'));
+  }
+  function showHelp(){openDialog(t('How FrameFlow Works','Как работает FrameFlow'),'<p class="help-text"><strong>'+t('1. Place the cursor in AE.','1. Поставьте курсор в таймлайне AE.')+'</strong><br>'+t('Choose a frame step using presets, slider or − / +. Shift changes it by 10; the wheel works over the focused number.','Выберите шаг кнопкой, ползунком или − / +. Shift меняет шаг на 10 кадров; колесо работает над активным числом.')+'</p><p class="help-text"><strong>'+t('2. Scope defaults to Auto.','2. По умолчанию — Авто.')+'</strong><br>'+t('Auto uses selected AE layers, or all layers when none are selected. Selected never expands an empty selection.','Авто использует выделенные в AE слои; без выделения — всю композицию. «Выделенные» без выделения не расширяет область.')+'</p><p class="help-text"><strong>'+t('3. Choose Before or After cursor, then an arrow.','3. Выберите До или После курсора и стрелку.')+'</strong><br>'+t('Left moves earlier; right moves later. Before excludes a key at the cursor; After includes it. Each action reads the current AE cursor and selection.','Влево — раньше, вправо — позже. «До» не включает ключ на курсоре; «После» включает. Перед действием курсор и выделение перечитываются из AE.')+'</p><p class="help-text">'+Object.keys(modeNames()).map(k=>'<strong>'+esc(modeNames()[k])+':</strong> '+esc(modeNotes()[k])).join('<br>')+'</p><p class="help-text"><strong>'+t('Close Gap','Убрать паузу')+'</strong> — '+t('removes the empty gap under the cursor, independent of step and mode. Turn on Preview, then press an arrow or Close Gap. Apply Plan executes only the checked targets.','удаляет пустой промежуток под курсором независимо от шага и режима. Включите «План», затем нажмите стрелку или «Убрать паузу». «Применить план» выполняет только проверенные изменения.')+'</p><p class="help-text"><strong>'+t('Time → Insert / Remove','Время → Вставить / Удалить')+'</strong> — '+t('shifts later layers by the frame step. Keep leaves crossing layers intact; Retime Animation changes eligible animation only. Footage crossings need a manual AE split. No layers or keys are deleted; composition duration stays unchanged. Always preview the interval before applying.','сдвигает последующие слои на выбранный шаг. «Оставить» сохраняет пересекающие слои целиком. «Изменить анимацию» меняет только доступную анимацию. Видео и аудио на пересечении требуют ручного разделения в AE. Слои и ключи не удаляются; длительность композиции не меняется. Перед применением всегда показывается план.')+'</p><p class="help-text"><strong>Arrange</strong> — '+t('Align In/Out to the cursor, Stagger layer starts or Sequence end to end with a gap. Set Top → Bottom, Bottom → Top or Start Time order and the cursor/first-layer anchor. Whole layers and all native keys move together. Preview is required; composition markers and duration stay unchanged.','Выравнивание начала/конца к курсору, лесенка начал или последовательность с зазором. Выберите порядок сверху, снизу или по началу и точку отсчёта — курсор либо первый слой. Целые слои и все нативные ключи перемещаются вместе. Требуется план; маркеры и длительность композиции не меняются.')+'</p><p class="help-text">'+t('Insufficient footage or precomp handles keep that entire layer in place by default. Settings can cancel the entire operation instead. Locked targets and key collisions block writing. Undo / Redo in AE. R refreshes; ? opens Help. Report opens and copies the diagnostics.','Если кадров видео или прекомпа не хватает, слой по умолчанию остаётся на месте. В настройках можно выбрать «Отменить всё». Блокировки и коллизии ключей запрещают запись. Undo / Redo выполняйте в AE. R обновляет сведения; ? открывает справку. «Отчёт» открывает и копирует диагностику.')+'</p><p class="note">FrameFlow '+M.VERSION+' · Made by Nasaat</p>');}
   function keydown(e){
-    if(!$('overlay').hidden){if(e.key==='Escape'){e.preventDefault();closeDialog();}if(e.key==='Tab'){const a=[...$('dialog').querySelectorAll('button,input,select,textarea')].filter(el=>!el.disabled);if(a.length){const i=a.indexOf(document.activeElement),next=e.shiftKey?(i<=0?a.length-1:i-1):(i+1)%a.length;e.preventDefault();a[next].focus();}}return;}
-    if(menuOwner){const owner=menuOwner,list=[...$('menu').querySelectorAll('button')].filter(b=>!b.disabled),i=list.indexOf(document.activeElement);if(e.key==='Escape'){e.preventDefault();closeMenu();owner.focus();}else if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();list[(i+(e.key==='ArrowDown'?1:-1)+list.length)%list.length].focus();}return;}
+    if(!$('overlay').hidden){if(e.key==='Escape'){e.preventDefault();closeDialog();}if(e.key==='Tab'){const a=[...$('dialog').querySelectorAll('button,input,select,textarea')].filter(el=>!el.disabled&&!el.closest('[hidden]')&&(el.getAttribute('type')!=='radio'||el.checked));if(a.length){const i=a.indexOf(document.activeElement),next=e.shiftKey?(i<=0?a.length-1:i-1):(i+1)%a.length;e.preventDefault();a[next].focus();}}return;}
+    if(e.key==='Escape'&&toolGroup){e.preventDefault();closeTools(true);return;}
     if(e.key==='Escape'&&!$('offset-plan').hidden){e.preventDefault();closeInlinePlan();schedulePoll();return;}
     if(e.ctrlKey||e.metaKey||e.altKey||['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName))return;if(e.key.toLowerCase()==='r'){e.preventDefault();refresh();}else if(e.key==='?'){e.preventDefault();showHelp();}
   }
@@ -529,9 +728,8 @@
     listenKBar();
     $('demo').onclick=()=>{bridge.dispose();bridge=FFDemo.create();isDemo=true;connectionFailed=false;readFailures=0;refresh();};if(!window.__adobe_cep__&&new URLSearchParams(location.search).get('demo')==='1')$('demo').click();
     $('offset-context').onclick=showOffsetOptions;
-    $('refresh').onclick=()=>refresh();$('open-settings').onclick=showSettings;$('open-help').onclick=showHelp;$('open-report').onclick=()=>showReport(true);
-    $('scope').onclick=()=>openMenu($('scope'),Object.keys(scopeNames()).map(v=>({id:v,label:scopeNames()[v],active:prefs.scope===v,onClick:()=>change('scope',v)})));
-    $('mode').onclick=()=>openMenu($('mode'),Object.keys(modeNames()).map(v=>({id:v,label:modeNames()[v],note:modeNotes()[v],active:prefs.mode===v,onClick:()=>change('mode',v)})));
+    $('refresh').onclick=()=>refresh();$('open-settings').onclick=()=>showSettings();$('open-help').onclick=showHelp;$('open-report').onclick=()=>showReport(true);
+    for(const key of ['scope','mode'])$(key).querySelectorAll('[data-'+key+']').forEach(b=>b.onclick=()=>change(key,b.dataset[key]));
     const frameInput=$('frames');
     frameInput.title=t('Frames or calculation. Press Enter to calculate, e.g. (24 + 6) / 2.','Кадры или выражение. Enter вычисляет результат, например (24 + 6) / 2.');
     frameInput.oninput=()=>{
@@ -543,9 +741,11 @@
     };
     frameInput.addEventListener('keydown',e=>{if(e.key!=='Enter')return;e.preventDefault();try{const value=M.parseFrameStep(frameInput.value);setFrames(value);status(value+' '+frameWord(value));}catch(error){frameInput.setAttribute('aria-invalid','true');status(t('The calculation must give 1–1000000 whole frames.','Результат должен быть целым числом от 1 до 1000000 кадров.'),true);}});
     $('frame-minus').onclick=e=>setFrames(prefs.frames-(e.shiftKey?10:1));$('frame-plus').onclick=e=>setFrames(prefs.frames+(e.shiftKey?10:1));$('frame-slider').oninput=e=>setFrames(Number(e.target.value));$('frames').addEventListener('wheel',e=>{if(document.activeElement!==$('frames')||busy)return;e.preventDefault();setFrames(prefs.frames+(e.deltaY<0?1:-1)*(e.shiftKey?10:1));},{passive:false});$('half-second').onclick=()=>setFrames(Math.max(1,Math.round(.5/state.frameDuration)));$('one-second').onclick=()=>setFrames(Math.max(1,Math.round(1/state.frameDuration)));
-    $('preview-plan').onclick=()=>openMenu($('preview-plan'),previewCommands.map(c=>({id:c.choice||c.id,label:commandLabel(c),disabled:!available(c),onClick:()=>runCommand(c.id,true)})));
-    $('close-dialog').onclick=closeDialog;$('overlay').onclick=e=>{if(e.target===$('overlay'))closeDialog();};$('import-file').onchange=async e=>{const file=e.target.files[0];if(!file)return;try{if(file.size>20000)throw Error(t('Settings file exceeds 20 KB.','Файл настроек превышает 20 KB.'));prefs=M.validate(JSON.parse(await file.text()));quickDraft=null;applyAppearance();persist();renderPresets();render();showSettings();}catch(error){preferenceError(error.message);}finally{e.target.value='';}};
-    document.addEventListener('keydown',safe(keydown));document.addEventListener('pointerdown',e=>{if(menuOwner&&!$('menu').contains(e.target)&&!menuOwner.contains(e.target))closeMenu();});window.addEventListener('resize',closeMenu);window.addEventListener('focus',()=>{if(!busy&&$('overlay').hidden&&$('offset-plan').hidden)refresh(true);});document.addEventListener('visibilitychange',schedulePoll);
+    $('preview-plan').onclick=()=>{
+      previewArmed=!previewArmed;closeInlinePlan(false);render();schedulePoll();
+    };
+    $('close-dialog').onclick=closeDialog;$('overlay').onclick=e=>{if(e.target===$('overlay'))closeDialog();};$('import-file').onchange=importSettings;
+    document.addEventListener('keydown',safe(keydown));window.addEventListener('focus',()=>{if(!busy&&$('overlay').hidden&&$('offset-plan').hidden)refresh(true);});document.addEventListener('visibilitychange',schedulePoll);
     window.addEventListener('beforeunload',()=>{disposed=true;clearTimeout(pollTimer);clearTimeout(saveTimer);try{preferenceStore.save(prefs);}catch(e){}bridge.dispose();});render();schedulePoll();if(saveError)status(saveError,true);
   }
   setup();

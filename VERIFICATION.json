@@ -1,13 +1,13 @@
 {
   "product": "FrameFlow AE",
-  "version": "2.5.0",
-  "checkedAt": "2026-11-27T23:53:55.510875+00:00",
+  "version": "2.5.1",
+  "checkedAt": "2026-11-28T12:52:12.565790+00:00",
   "sourceRef": "local working tree before publication",
   "target": "After Effects 25.x–27.x / CEP 12 / Windows and macOS",
   "checks": {
     "tests": {
-      "tests": 305,
-      "pass": 305,
+      "tests": 306,
+      "pass": 306,
       "fail": 0,
       "skipped": 0,
       "cancelled": 0
@@ -16,7 +16,7 @@
     "hostSyntax": [
       {
         "file": "extension/jsx/host.jsx",
-        "sha256": "478d8e190ab8d2271535fbd3d48641fcd01bd4eae8ef1f49487d914f0208ee37",
+        "sha256": "18ee40f2b721af57bb14b55de12af8879b8612c41e553621ad75478ace9d1b03",
         "parser": "Acorn 8.18.0",
         "options": {
           "ecmaVersion": 3,
@@ -112,7 +112,7 @@
       },
       {
         "file": "src/core.jsxinc",
-        "sha256": "0b9b1d39a678c7d67af02d049b4c421bf6a2f818473c6ffdfceeb513bd570eb3",
+        "sha256": "a1433827efebe670e6314151c28bf55c44c513e47fb7433bbb995bae23346fde",
         "parser": "Acorn 8.18.0",
         "options": {
           "ecmaVersion": 3,
@@ -160,7 +160,7 @@
       },
       {
         "file": "src/panel-host.jsxinc",
-        "sha256": "abc7cf739b105cefc8669ad285e1ecf02dd0ff3111a4b7001f02383477954746",
+        "sha256": "812e21bf237b9ae133e9505eeecd5f1bf9e0cf2ea9a313c7642e22e675fcf130",
         "parser": "Acorn 8.18.0",
         "options": {
           "ecmaVersion": 3,
@@ -213,60 +213,213 @@
     "actualAE_CEP": "not_run: no actual AE connection",
     "actualClipboard": "not_run: DOM/API simulations only",
     "actualWindowsMacOSInstallers": "not_run: source and shell syntax only",
-    "realBrowserLayout": "not_run for this build",
+    "realBrowserLayout": {
+      "version": "2.5.1",
+      "sourceRef": "local",
+      "engine": "Chromium",
+      "host": "simulated AE/CEP fixture; no actual Adobe connection",
+      "checks": [
+        {
+          "name": "English default and reduced controls",
+          "status": "pass"
+        },
+        {
+          "name": "all main commands fit the default 360x290 panel",
+          "status": "pass"
+        },
+        {
+          "name": "no horizontal overflow at 320",
+          "status": "pass"
+        },
+        {
+          "name": "no horizontal overflow at 360",
+          "status": "pass"
+        },
+        {
+          "name": "no horizontal overflow at 650",
+          "status": "pass"
+        },
+        {
+          "name": "20 frame edits retain segmented button nodes and avoid global style/HTML mutations",
+          "status": "pass"
+        },
+        {
+          "name": "preview is read-only and Apply executes the captured plan once",
+          "status": "pass"
+        },
+        {
+          "name": "changed AE cursor rejects the captured plan without writing",
+          "status": "pass"
+        },
+        {
+          "name": "Time buttons open an explicit interval policy before read-only preview",
+          "status": "pass"
+        },
+        {
+          "name": "a dismissed slow preview never replaces a newer dialog or writes a scene",
+          "status": "pass"
+        },
+        {
+          "name": "Arrange policies preview without writing and show per-layer shifts",
+          "status": "pass"
+        },
+        {
+          "name": "Sequence zero gap validates its draft and applies in explicit reverse order",
+          "status": "pass"
+        },
+        {
+          "name": "language changes settings and main immediately and survives reopen",
+          "status": "pass"
+        },
+        {
+          "name": "large Russian text and settings fit 320x280 without horizontal overflow",
+          "status": "pass"
+        },
+        {
+          "name": "Russian Arrange dialog with large text fits 320x280 and keeps keyboard focus",
+          "status": "pass"
+        },
+        {
+          "name": "long mode labels and maximum frame step do not overflow",
+          "status": "pass"
+        },
+        {
+          "name": "compact scope and mode buttons fit and tool groups stay in-flow",
+          "status": "pass"
+        },
+        {
+          "name": "theme text contrast meets 4.5 to 1",
+          "status": "pass"
+        },
+        {
+          "name": "invalid frame drafts still allow a read-only gap preview",
+          "status": "pass"
+        },
+        {
+          "name": "offset hierarchy and label selection fit a narrow panel and leave AE unchanged",
+          "status": "pass"
+        },
+        {
+          "name": "favorites and In/Out + Keys stay reachable at 320 px",
+          "status": "pass"
+        },
+        {
+          "name": "key-order conflicts offer a checked skip at 320 px without editing the scene",
+          "status": "pass"
+        },
+        {
+          "name": "a catalogue-only toolbar command inherits theme and captured-plan application",
+          "status": "pass"
+        },
+        {
+          "name": "a catalogue-only button group localizes and stays usable at narrow widths",
+          "status": "pass"
+        },
+        {
+          "name": "settings show two columns on a wide panel, with neutral colors and exact values",
+          "status": "pass"
+        },
+        {
+          "name": "no unhandled browser errors",
+          "status": "pass"
+        }
+      ],
+      "screenshots": [
+        "main-dark.png",
+        "plan-dark.png",
+        "arrange-policy.png",
+        "arrange-plan.png",
+        "settings-light.png",
+        "main-russian.png",
+        "arrange-russian.png",
+        "custom-commands-russian.png",
+        "settings-wide-dark.png"
+      ],
+      "sourceHashes": {
+        "extension/index.html": "0c7e411043fe81d4cf743186b0580121f66a91d91f87f924f0291df239683df6",
+        "extension/css/panel.css": "f33a036a9fba22f375abe4b8f08e334313bdcc628f97920acf30beefaa08e07a",
+        "extension/js/bridge.js": "a431fa3afa311b6c9eb6ba5b9b78db5afe23d23645f44faa76704d88767fb11b",
+        "extension/js/commands.js": "891e384611a1c1fe68d807622955db17183d3c9454be8e64c6f0a0c79441f903",
+        "extension/js/demo.js": "00ec9d778e25a5b4deda080854a79567d45ee1ffd470c734261d4c6c809b9735",
+        "extension/js/i18n.js": "648c261d913f021b282b0f6962be3310712d286cac320124b1b0642e201353b0",
+        "extension/js/model.js": "6be501628b1659ed1b757a1733bb88549696aac49a193b49040f64a0b18cc83e",
+        "extension/js/panel.js": "10a32ac07bea8301455f288bde6e8688ec81f86e1e72cf6ad6177ad44bebc08c",
+        "extension/js/ui.js": "7ea4d743838e4e61b363ebdf718862476ce7769f99c1ac88ca07319507e70a90",
+        "extension/jsx/host.jsx": "18ee40f2b721af57bb14b55de12af8879b8612c41e553621ad75478ace9d1b03",
+        "src/core.jsxinc": "a1433827efebe670e6314151c28bf55c44c513e47fb7433bbb995bae23346fde",
+        "src/marker-reference.jsxinc": "0a9fd9c8aa73dfcb24e9a85cad987569fdf26c22f93d1590a81b4fa27b514ca5",
+        "src/nested-offset.jsxinc": "96dcda77ecfbcd35ab400ea0d9d197e730ba1fa3d22a66d4a1e12e8e035b97a1",
+        "src/panel-host.jsxinc": "812e21bf237b9ae133e9505eeecd5f1bf9e0cf2ea9a313c7642e22e675fcf130",
+        "src/time-tools.jsxinc": "48236318c515a7671fecea82a6e6ffa8bb8a587153693b9bb80922f460e07d28",
+        "tools/runtime-sources.cjs": "29cfc7fcef4d92377d5f9647ca652bcbac21dbffdc6dfb622deffe3329cdf0cf",
+        "src/commands/arrange.jsxinc": "fc42a7dd1bb05286bd31530845a205f9d324459f75c6ed1e20e450c562c9640f",
+        "src/commands/gap.jsxinc": "ebcb4686d943cb6fd32dac9751cea2d2e3556be618ca8de81352a09439c722e5",
+        "src/commands/interval.jsxinc": "a5537a1a6e56c7176ac5897e37f7fa4bb30d55ca2a529d691d4d8d62a172bd75",
+        "src/commands/move.jsxinc": "fdad0a6b8bb825ab7ef25d2aa8d5b3fd29bd32520342cb7bc118824a6cef63a9",
+        "src/commands/offset.jsxinc": "e8dfa9890ff804eb11fd15129eeb2cfccd753118febd6d75257f3071689e1894",
+        "tools/command-modules.cjs": "9cd2718ec5119ed800ff6e8fae86a7bc84f3fb2cc4a1fe60cfa7e58787afff4c",
+        "tools/build.cjs": "df0f4747cc3827b14c7c47a01bcc795e9b7b400615128b6ce66ba1442b85b5ca",
+        "tests/host-fixture.cjs": "8903b7fecdea0ecc91d19b9b657fa1ba3ff7f3228e4c2039531960233b499c9b",
+        "tools/browser-check.cjs": "f04bc1753cc267013e0399e115fba1473a02343366f32a007643555ea22f1a88"
+      },
+      "browserVersion": "158.0.8127.0",
+      "status": "pass",
+      "passed": 26,
+      "failed": 0
+    },
     "review": "self-review only"
   },
   "sourceFiles": {
     ".github/workflows/validate.yml": "6cc865db68715e6eacc4a35389a5643ff8772b4207a6f50810a9ac63a79a3d2b",
     ".gitignore": "8853fe1710f63b79e45901adca767b266ccdad7fb088a20f11003a91a6612ee9",
     "AGENTS.md": "b447c39d9f0ff87ceebe2813dd07abd705630b43c8d930a779012007c1df9be6",
-    "CHANGELOG.md": "f215ed47578057de6a72fc7137ad885a4efbd967ba0a129a0a7cf8a82e98730e",
-    "PREVIEW.html": "9dc23e576e8542953798d036ba1b93dfac9ce7d3121fd1848646599a69c220e8",
-    "README.md": "a1503ef83498dc214a0c6a426793b83de057b884e25b6bf56fae2a242c88e6cb",
-    "README_RU.md": "6ac1ab8ff9317ee8c2d7227b17235ab8f6947179f525fbbf46e858b67e5e4194",
-    "ROADMAP_RU.md": "b943ebe65ded3c5a774ca6d634bfe48d86961965dbafc4ec8a881d0feb4fb018",
-    "docs/AE_SMOKE_TEST_RU.md": "a06978c93c6dcff4e0b6d972bbf9c9a8b40e8858f8e52c8fb7dabe6ed0289c79",
-    "docs/EXTENDING.md": "9ef389b4d799ea9a84b61d7bd52d03fae347104eb6f200d53c897c69d58f258b",
+    "CHANGELOG.md": "74b68b82f52c899d47f8bcd6b3f0a4cb3a829bb426f50564a1c6597476b0cadf",
+    "PREVIEW.html": "bdd5ee3361c78408ac1b3d42daa22504269883b9dd908768487ffa250df51627",
+    "README.md": "63794fb08bbfc88ad54f7acc5c13500b166cc8e33c4a32f9fa959b557363e632",
+    "README_RU.md": "610282bf300e1a696f204f83cbabd2731349a2dc834a37dc123d4b9d9a9e9742",
+    "ROADMAP_RU.md": "4c87b93150f536ac802a41081f32bbf83b8851ebbc4c3d60b73a507cbf8fcd8b",
+    "docs/AE_SMOKE_TEST_RU.md": "db7a366c0fe7ac00555ddbe2c99dabcb9349e8ff76688eed0cee0461dec06a22",
+    "docs/EXTENDING.md": "02ae29a4c862f5ad9869bc2466c5cf87b138484087920580458725e444e46d26",
     "docs/KBAR.md": "ea3705f079c30350ea7abf697c43d7490e04c5533c2c82870d0786d274616d9f",
     "docs/SOURCES.md": "4ada45c84e3ae959dce764ce420b1a18ccaa502215c963eb0e74b947315c14fc",
-    "docs/STATUS.md": "c35d41e4eed98a825260cb30ef36e7e81f5cb75872f919b772f09e93d84bdb49",
+    "docs/STATUS.md": "93626a579d627f0cef1c5be63df830e6090f4e355e1d2ad944e8cc92a28986a5",
     "docs/TIME_OFFSET_COMPARISON.md": "5f0fa357874ff78fb1d1c5b180ff824a41e3c1026e67077998344bf052fe876b",
-    "docs/verification.log": "aaa463ff967ca717282521bdbcdbd970c99274420882c5fd84cecd113193530f",
-    "extension/CSXS/manifest.xml": "d8050aa6680bd692384782c2c1838d9c3f209bfcc6616e02aa58b1107d4d2fef",
-    "extension/css/panel.css": "4abe19a973ba37c9b8635ae0fe2f733ccd274e42ede6e078a4d343d23752e086",
-    "extension/index.html": "cfcfe41aaa0a8e15765bd883e0bbc4e38bcdca537ee10f7295361b9675552eee",
-    "extension/js/bridge.js": "c64d8598e90f8cc99f41a4ca81749d463ecdd2582c236fdf3b6b9d7a4bc39c41",
+    "docs/verification.log": "cf51aceb8dc67181379dd47bcf145c9ea3a460d840ca85e952c0243a8117e411",
+    "extension/CSXS/manifest.xml": "0391deb7e7aaa25d7f40ef30f68f9dbc33f65c3621158acf606ad9422af48689",
+    "extension/css/panel.css": "f33a036a9fba22f375abe4b8f08e334313bdcc628f97920acf30beefaa08e07a",
+    "extension/index.html": "0c7e411043fe81d4cf743186b0580121f66a91d91f87f924f0291df239683df6",
+    "extension/js/bridge.js": "a431fa3afa311b6c9eb6ba5b9b78db5afe23d23645f44faa76704d88767fb11b",
     "extension/js/commands.js": "891e384611a1c1fe68d807622955db17183d3c9454be8e64c6f0a0c79441f903",
-    "extension/js/demo.js": "3a5aa7c0452bf67ae78a7dbe9cc842a6881bf127798a7a2a667ffc3fbd81d0d7",
-    "extension/js/i18n.js": "20c73fa6d221f84980911b75e966d94fb95db8f6bd842fc7b29c963f02251e3b",
-    "extension/js/model.js": "e71f520683e311518071e63ec1e4849001023f9370554f7904572e5509e49637",
-    "extension/js/panel.js": "a10269ef3b9dc470e887653b6155419a5a921aedd74fd7cc83b8ac5dbb0a05b7",
-    "extension/js/ui.js": "cfcd848f939b5bcd8a3a341ce06d022e81a523ced94a0316e3a8f80b494c4789",
-    "extension/jsx/host.jsx": "478d8e190ab8d2271535fbd3d48641fcd01bd4eae8ef1f49487d914f0208ee37",
+    "extension/js/demo.js": "00ec9d778e25a5b4deda080854a79567d45ee1ffd470c734261d4c6c809b9735",
+    "extension/js/i18n.js": "648c261d913f021b282b0f6962be3310712d286cac320124b1b0642e201353b0",
+    "extension/js/model.js": "6be501628b1659ed1b757a1733bb88549696aac49a193b49040f64a0b18cc83e",
+    "extension/js/panel.js": "10a32ac07bea8301455f288bde6e8688ec81f86e1e72cf6ad6177ad44bebc08c",
+    "extension/js/ui.js": "7ea4d743838e4e61b363ebdf718862476ce7769f99c1ac88ca07319507e70a90",
+    "extension/jsx/host.jsx": "18ee40f2b721af57bb14b55de12af8879b8612c41e553621ad75478ace9d1b03",
     "install/Install-Windows.cmd": "357f3ef966291283fb0ef3fe2dce2713db86974f024fc27c668047e7f3cb61cd",
     "install/Install-Windows.ps1": "b7bf8f9463c7714cbb4cdc20e8217dcb258cf724789bb925baf4c6d667e14376",
-    "install/Install-macOS.command": "bc66837cf5f6d54c0e09582e336c6747c975bcc0533b2e08282f0d89cc698c36",
+    "install/Install-macOS.command": "afdf027a536504870f5d106657c4010617ff0740f8478f116fe9c5d7b922038f",
     "install/RESTORE_MACOS_RU.md": "e9cd081b33d397af9953a263f97df4c7bfd2d1cac43d1b049c12ed278ecaab56",
     "install/Restore-Windows.cmd": "65b209c003922d123dbbdc4ef025936bf4fb3fccc1f1c7954c329c9d43fc4a06",
     "install/Restore-Windows.ps1": "22d3c2c98de97dc8fba18e5a137333e0b48e157e0663de573114a21f8ec601c5",
-    "package.json": "fe64969cba0be8ec05c01f48c9ea4350df1f2fa8fbff009e6156ab3a88ce9223",
+    "package.json": "7304b4076d7e30b40e8b0f9292781a7812e26aed01b81424301808ef87f41629",
     "src/commands/arrange.jsxinc": "fc42a7dd1bb05286bd31530845a205f9d324459f75c6ed1e20e450c562c9640f",
     "src/commands/gap.jsxinc": "ebcb4686d943cb6fd32dac9751cea2d2e3556be618ca8de81352a09439c722e5",
     "src/commands/interval.jsxinc": "a5537a1a6e56c7176ac5897e37f7fa4bb30d55ca2a529d691d4d8d62a172bd75",
     "src/commands/move.jsxinc": "fdad0a6b8bb825ab7ef25d2aa8d5b3fd29bd32520342cb7bc118824a6cef63a9",
     "src/commands/offset.jsxinc": "e8dfa9890ff804eb11fd15129eeb2cfccd753118febd6d75257f3071689e1894",
-    "src/core.jsxinc": "0b9b1d39a678c7d67af02d049b4c421bf6a2f818473c6ffdfceeb513bd570eb3",
+    "src/core.jsxinc": "a1433827efebe670e6314151c28bf55c44c513e47fb7433bbb995bae23346fde",
     "src/marker-reference.jsxinc": "0a9fd9c8aa73dfcb24e9a85cad987569fdf26c22f93d1590a81b4fa27b514ca5",
     "src/nested-offset.jsxinc": "96dcda77ecfbcd35ab400ea0d9d197e730ba1fa3d22a66d4a1e12e8e035b97a1",
-    "src/panel-host.jsxinc": "abc7cf739b105cefc8669ad285e1ecf02dd0ff3111a4b7001f02383477954746",
+    "src/panel-host.jsxinc": "812e21bf237b9ae133e9505eeecd5f1bf9e0cf2ea9a313c7642e22e675fcf130",
     "src/time-tools.jsxinc": "48236318c515a7671fecea82a6e6ffa8bb8a587153693b9bb80922f460e07d28",
     "tests/arrange.cjs": "944c90ea85aca3db74e58f843ad1c72eaa98a4d54a690d660b3e6c7219e7b36f",
     "tests/bootstrap.cjs": "bf6c6f26a80f70f86bfb19c12d7a8bbd2d03a738d4131bf685c8e2c49998e22e",
     "tests/commands.cjs": "ff1f76247e97ef7d361edcac87558195fae1c9a91a7b5603936ccc04af482dc5",
     "tests/es3.cjs": "aabcbec36af13a6eef0a058f2785aa0ae2bd5fa7876e02a080f8b6b55589875a",
-    "tests/frontend.cjs": "23f90994c620f0713f9c0bdb35f71fb13391d72eed4de1f950b5e54b98ccb81b",
-    "tests/host-fixture.cjs": "957bcebc03441e2c88bdb49ca17ef1aff40c63a73bc5887d5743f51114aae8e6",
-    "tests/host.cjs": "5b98dcdc21c8a047c12522348a7de8799531b92f837556d30261bd7f8ad9cb23",
+    "tests/frontend.cjs": "d04a476204d72b667a093e121e38145c3dcb38d97e380a94a264831eb040b28b",
+    "tests/host-fixture.cjs": "8903b7fecdea0ecc91d19b9b657fa1ba3ff7f3228e4c2039531960233b499c9b",
+    "tests/host.cjs": "d4abd5be7d28f18b9845ae05bd5eeca66816f532247203b960b9702afca82f98",
     "tests/labels.cjs": "b39a7c3a1966e2f6602258591419ba04089050d35d0e0f246ea41d6b57a0518d",
     "tests/marker-reference.cjs": "4c8f0eefc23b08a2c043978d4b4c5d8814c954d1db6b8d2da0ae4d2926e2a877",
     "tests/native/After-minus-five.jsx": "e2915d106e4d581ec192e4449c09c24f174eff528eba2f156bac237a83a1794d",
@@ -274,8 +427,8 @@
     "tests/protected-trim.cjs": "e21f6c3d2f3295e1398508ca15810d91e83b4e0b5e51649af441b0c382841652",
     "tests/time-tools.cjs": "434892be2a81dd576206ec15b884bb72f791d1836d48376828bc86247cd9d6b8",
     "tests/timing.cjs": "389b2f4a6cc520c573497562ec0a686da3bd3dd7749e5d6872258375f2210f06",
-    "tests/ui-dom.cjs": "c28776113d7dec009999b093cc825054ee5b296b1460bbb13fd34bc601e1d96c",
-    "tools/browser-check.cjs": "27d327c0350a217aa03b0a7b220091f979094cc0cbacde6d7dd30e91fcc55c9e",
+    "tests/ui-dom.cjs": "f5df915441960fcde098c826041ffcb0c23bf512c5b9cf7789f3e1dd4d02b45b",
+    "tools/browser-check.cjs": "f04bc1753cc267013e0399e115fba1473a02343366f32a007643555ea22f1a88",
     "tools/build.cjs": "df0f4747cc3827b14c7c47a01bcc795e9b7b400615128b6ce66ba1442b85b5ca",
     "tools/check.cjs": "3c01141598c579eb799c7bdb7aae5c27d4e72da7308c50fce8a5f48e7b64c7c6",
     "tools/command-modules.cjs": "9cd2718ec5119ed800ff6e8fae86a7bc84f3fb2cc4a1fe60cfa7e58787afff4c",

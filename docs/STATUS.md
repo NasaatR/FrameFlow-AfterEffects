@@ -1,5 +1,9 @@
 # FrameFlow status
 
+## 2.5.1
+
+The 2.5 interface update follows the already issued 2.5.0 version rollover. The dock exposes scope and shift mode buttons, inline command groups, and a monochrome Settings screen. Existing settings v4 and CEP identities carry forward. New native AE testing is still pending.
+
 ## 2.5.0
 
 FrameFlow resumes single-digit minor/patch numbering after the issued 2.4.14. The AE menu shows FrameFlow 2.5. The bundle and panel IDs are unchanged. Verify the installed panel and kernel both report 2.5.0 in native AE.
